@@ -52,7 +52,10 @@ def check_secret_scan() -> None:
 
 
 def check_skill_validation() -> None:
-    for skill_dir in [SKILL_FORGE, SOMNIA]:
+    skill_dirs = [SKILL_FORGE]
+    if SOMNIA.exists():
+        skill_dirs.append(SOMNIA)
+    for skill_dir in skill_dirs:
         result = run_json(
             [
                 sys.executable,
@@ -98,7 +101,7 @@ def check_install_gate() -> None:
             [
                 sys.executable,
                 str(SKILL_FORGE / "scripts" / "install" / "propose_skill_install.py"),
-                str(SOMNIA),
+                str(SKILL_FORGE),
                 "--target-root",
                 target,
                 "--apply",
@@ -107,7 +110,7 @@ def check_install_gate() -> None:
             check=False,
         )
         assert_true(result["status"] == "blocked", "direct apply was not blocked")
-        assert_true(not (Path(target) / "somnia").exists(), "direct apply created target")
+        assert_true(not (Path(target) / "skill-forge").exists(), "direct apply created target")
 
 
 def check_telegram_dry_run_install() -> None:
@@ -181,6 +184,9 @@ def check_telegram_missing_config() -> None:
 
 
 def check_somnia_review() -> None:
+    if not SOMNIA.exists():
+        print("skip somnia-review (sibling ../somnia not found)")
+        return
     with tempfile.TemporaryDirectory() as report_root, tempfile.TemporaryDirectory() as update_root:
         result = run_json(
             [

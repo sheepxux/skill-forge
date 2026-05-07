@@ -4,10 +4,10 @@
 
 # Skill Forge
 
-This project is split into two desktop-level OpenClaw-compatible skills:
+This repository contains the `skill-forge` OpenClaw-compatible skill. It also supports a sibling companion skill:
 
 - `skill-forge`: generates, validates, installs, and evolves reusable skills.
-- `somnia`: runs overnight health review and proposal-based skill maintenance.
+- `somnia`: optional companion skill for overnight health review and proposal-based skill maintenance.
 
 `skill-forge` is a milestone self-improvement product for OpenClaw-style agents.
 
@@ -24,7 +24,7 @@ mkdir -p ~/.openclaw/workspace/skills
 ln -sfn "$HOME/Desktop/skill-forge/skill-forge" ~/.openclaw/workspace/skills/skill-forge
 ```
 
-If you also use Somnia, install the sibling skill:
+If you also use Somnia, place its separate folder next to this repository and install the sibling skill:
 
 ```bash
 ln -sfn "$HOME/Desktop/somnia" ~/.openclaw/workspace/skills/somnia
@@ -116,7 +116,7 @@ skill-forge/
     ├── references/
     └── examples/
 
-../somnia/
+../somnia/                 # optional companion skill, separate folder/repo
 ├── SKILL.md
 ├── agents/openai.yaml
 ├── references/
@@ -168,7 +168,7 @@ skill-forge/
 
 ```
 
-Root-level wrappers remain under `skill-forge/scripts/*.py` for backward compatibility. The standalone sibling `../somnia` skill delegates to the maintained Skill Forge Somnia runtime so there is one source of truth for scheduled review behavior.
+Root-level wrappers remain under `skill-forge/scripts/*.py` for backward compatibility. If the optional sibling `../somnia` skill is present, it delegates to the maintained Skill Forge Somnia runtime so there is one source of truth for scheduled review behavior.
 
 ## Fast Demo
 
@@ -392,7 +392,7 @@ Run the full local release check before publishing:
 python3 tests/run_release_checks.py
 ```
 
-This checks Python compilation, secret scanning, skill validation, Skill Forge generation, Telegram-gated install behavior, missing Telegram config handling, and Somnia review.
+This checks Python compilation, secret scanning, skill validation, Skill Forge generation, Telegram-gated install behavior, and missing Telegram config handling. Somnia review is checked only when the optional sibling `../somnia` folder exists.
 
 Run only the secret scanner:
 
