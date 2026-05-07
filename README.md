@@ -31,7 +31,9 @@ Optional companion:
 clawhub install somnia
 ```
 
-The ClawHub package is published as `skills-forge` because `skill-forge` is already used by another publisher. The installed skill folder and runtime identity remain `skill-forge`.
+The ClawHub package is published as `skills-forge` because `skill-forge` is already used by another publisher. ClawHub installs it into a `skills-forge/` folder; the skill metadata name remains `skill-forge`.
+
+ClawHub may show a safety warning because this skill includes Telegram approval calls and local install/rollback scripts. Review the source first; for non-interactive installs, pass `--force` only after review.
 
 For local development, symlink this repository into OpenClaw:
 
