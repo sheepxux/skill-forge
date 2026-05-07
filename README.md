@@ -19,6 +19,22 @@ It turns repeated capability gaps into reviewed skill candidates. The product de
 
 ### 1. Install the skill into OpenClaw
 
+Install from ClawHub:
+
+```bash
+clawhub install skills-forge
+```
+
+Optional companion:
+
+```bash
+clawhub install somnia
+```
+
+The ClawHub package is published as `skills-forge` because `skill-forge` is already used by another publisher. The installed skill folder and runtime identity remain `skill-forge`.
+
+For local development, symlink this repository into OpenClaw:
+
 ```bash
 mkdir -p ~/.openclaw/workspace/skills
 ln -sfn "$HOME/Desktop/skill-forge/skill-forge" ~/.openclaw/workspace/skills/skill-forge
@@ -404,7 +420,14 @@ Use `.env.example` as a template for private Telegram config. Do not commit real
 
 ## OpenClaw use
 
-Copy or symlink the skill folders into your OpenClaw skills workspace if you want the agent to use them directly.
+Install from ClawHub for normal use:
+
+```bash
+clawhub install skills-forge
+clawhub install somnia
+```
+
+Copy or symlink the skill folders into your OpenClaw skills workspace if you are developing locally.
 
 Example:
 
