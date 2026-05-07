@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/skill-forge-logo.png" alt="Skill Forge logo" width="360">
+</p>
+
 # Skill Forge
 
 This project is split into two desktop-level OpenClaw-compatible skills:
