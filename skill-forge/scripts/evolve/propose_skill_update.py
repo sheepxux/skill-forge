@@ -9,6 +9,7 @@ from typing import Optional
 
 DEFAULT_TARGET_ROOT = Path.home() / ".openclaw" / "workspace" / "skills"
 DEFAULT_FEEDBACK_FILE = Path.home() / ".openclaw" / "workspace" / ".learnings" / "skill-feedback.jsonl"
+SAFE_SKILL_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
 STOPWORDS = {
     "the", "and", "for", "that", "with", "from", "this", "have", "your", "will",
@@ -22,6 +23,18 @@ def load_manifest(target_root: Path) -> dict:
     if not path.exists():
         return {"installs": {}}
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def valid_skill_name(skill: str) -> bool:
+    return bool(SAFE_SKILL_RE.fullmatch(skill)) and ".." not in skill
+
+
+def contained_child(root: Path, child_name: str) -> Path:
+    root = root.expanduser().resolve()
+    candidate = (root / child_name).resolve()
+    if candidate == root or root not in candidate.parents:
+        raise ValueError(f"unsafe output path for skill: {child_name}")
+    return candidate
 
 
 def resolve_skill_source(skill: str, target_root: Path, source: str) -> Path:
@@ -168,6 +181,12 @@ def write_evolution_reference(candidate: Path, entries: list[dict], triggers: li
 
 def propose_update(args: argparse.Namespace) -> dict:
     skill = args.skill
+    if not valid_skill_name(skill):
+        return {
+            "status": "invalid-skill-name",
+            "skill": skill,
+            "reason": "Skill names must be safe slugs: lowercase letters, digits, dots, underscores, or hyphens.",
+        }
     target_root = Path(args.target_root).expanduser().resolve()
     feedback_file = Path(args.feedback_file).expanduser().resolve()
     source = resolve_skill_source(skill, target_root, args.source)
@@ -179,7 +198,10 @@ def propose_update(args: argparse.Namespace) -> dict:
         return {"status": "no-feedback", "skill": skill, "feedback_file": str(feedback_file)}
 
     output_root = Path(args.output).expanduser().resolve()
-    candidate = output_root / skill
+    try:
+        candidate = contained_child(output_root, skill)
+    except ValueError as error:
+        return {"status": "unsafe-output-path", "skill": skill, "reason": str(error)}
     if candidate.exists() or candidate.is_symlink():
         if candidate.is_symlink() or candidate.is_file():
             candidate.unlink()

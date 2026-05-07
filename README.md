@@ -11,7 +11,7 @@ This repository contains the `skill-forge` OpenClaw-compatible skill. It also su
 
 `skill-forge` is a milestone self-improvement product for OpenClaw-style agents.
 
-Current version: `v0.4.2 "Telegram Gate"`.
+Current version: `v0.4.3 "Safety Tightening"`.
 
 It turns repeated capability gaps into reviewed skill candidates. The product deliberately separates learning, generation, validation, and installation so an agent can improve itself without silently polluting its own skill set.
 
@@ -466,6 +466,7 @@ This version is considered a milestone because it has a real closed loop:
 - `v0.4.0 "Replay"`: redacted replay cases, replay scoring, regression gate
 - `v0.4.1 "Somnia Split"`: standalone Somnia skill package and module cleanup
 - `v0.4.2 "Telegram Gate"`: mandatory Telegram approval for install mutations
+- `v0.4.3 "Safety Tightening"`: safe skill slug containment for evolution updates and clearer registry safety posture
 
 ## License
 

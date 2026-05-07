@@ -183,6 +183,26 @@ def check_telegram_missing_config() -> None:
     assert_true(result["status"] == "missing-config", "missing Telegram config was not detected")
 
 
+def check_update_path_guard() -> None:
+    with tempfile.TemporaryDirectory() as output, tempfile.TemporaryDirectory() as target:
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "evolve" / "propose_skill_update.py"),
+                "--skill",
+                "../outside",
+                "--output",
+                output,
+                "--target-root",
+                target,
+                "--json",
+            ],
+            check=False,
+        )
+        assert_true(result["status"] == "invalid-skill-name", "unsafe skill name was not rejected")
+        assert_true(not (Path(output).parent / "outside").exists(), "unsafe candidate path was created")
+
+
 def check_somnia_review() -> None:
     if not SOMNIA.exists():
         print("skip somnia-review (sibling ../somnia not found)")
@@ -217,6 +237,7 @@ def main() -> int:
         ("install-gate", check_install_gate),
         ("telegram-dry-run-install", check_telegram_dry_run_install),
         ("telegram-missing-config", check_telegram_missing_config),
+        ("update-path-guard", check_update_path_guard),
         ("somnia-review", check_somnia_review),
     ]
     for name, check in checks:

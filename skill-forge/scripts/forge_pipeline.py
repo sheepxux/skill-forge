@@ -142,9 +142,9 @@ def main() -> int:
     report = run_json([sys.executable, str(BASE_DIR / "validate_skill_candidate.py"), skill_dir, "--json"])
     profile = report.get("inferred_profile", template)
     evaluation = run_evaluation(skill_dir, profile, args.eval)
-    authorization = agent_authorization(args.agent_name, profile)
+    agent_policy = agent_authorization(args.agent_name, profile)
     plan = run_json(install_args(BASE_DIR, args, skill_dir))
-    eligible, install_reason = install_eligibility(report, evaluation, None, authorization, args.min_install_score)
+    eligible, install_reason = install_eligibility(report, evaluation, None, agent_policy, args.min_install_score)
 
     install_status = "planned"
     approval = None
@@ -169,7 +169,7 @@ def main() -> int:
         "skill_dir": skill_dir,
         "validation": report,
         "evaluation": evaluation,
-        "agent_authorization": authorization,
+        "agent_authorization": agent_policy,
         "approval": approval,
         "install_status": install_status,
         "install_reason": install_reason,

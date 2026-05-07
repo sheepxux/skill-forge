@@ -7,7 +7,7 @@ description: Detect repeated capability gaps, convert recurring user needs into 
 
 Use this skill to turn repeated demand into a reviewed skill candidate.
 
-Current version: `v0.4.2 "Telegram Gate"`.
+Current version: `v0.4.3 "Safety Tightening"`.
 
 ## Core jobs
 

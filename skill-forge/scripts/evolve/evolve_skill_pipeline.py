@@ -116,9 +116,9 @@ def main() -> int:
             eval_cmd.append("--show-details")
         evaluation = run_json(eval_cmd, check=False)
     replay = run_replay(args, candidate)
-    authorization = agent_authorization(args.agent_name, profile)
+    agent_policy = agent_authorization(args.agent_name, profile)
     plan = run_json(install_args(SCRIPTS_DIR, args, candidate))
-    eligible, install_reason = install_eligibility(report, evaluation, replay, authorization, args.min_install_score)
+    eligible, install_reason = install_eligibility(report, evaluation, replay, agent_policy, args.min_install_score)
 
     approval = None
     install_status = "planned"
@@ -143,7 +143,7 @@ def main() -> int:
         "validation": report,
         "evaluation": evaluation,
         "replay": replay,
-        "agent_authorization": authorization,
+        "agent_authorization": agent_policy,
         "approval": approval,
         "install_status": install_status,
         "install_reason": install_reason,
