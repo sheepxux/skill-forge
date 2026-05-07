@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill Forge"
+  short_description: "Detect and scaffold new skills"
+  default_prompt: "Detect repeated capability gaps and scaffold a reusable skill draft."

@@ -1,0 +1,15 @@
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.tmp
+.env
+.env.*
+!.env.example
+generated/
+generated-milestone/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
