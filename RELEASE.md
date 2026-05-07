@@ -14,9 +14,13 @@ Manual checks:
 - Confirm no generated candidate directories are present.
 - Confirm real API keys and Telegram tokens have been rotated if they were ever exposed elsewhere.
 
-Preview tag suggestion:
+Release tag:
 
 ```bash
-git tag v0.4.2-preview
+git tag v0.4.2
 ```
 
+Published package slugs:
+
+- ClawHub: `skills-forge`
+- Optional companion: `somnia`
