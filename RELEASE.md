@@ -19,7 +19,7 @@ Manual checks:
 Release tag:
 
 ```bash
-git tag v1.0.0
+git tag v1.0.1
 ```
 
 Published package slugs:

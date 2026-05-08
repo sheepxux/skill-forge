@@ -13,7 +13,7 @@ This repository contains the `skill-forge` OpenClaw-compatible skill. It also su
 
 `skill-forge` is a milestone self-improvement product for OpenClaw-style agents.
 
-Current version: `v1.0.0 "Forge Console"`.
+Current version: `v1.0.1 "Forge Console Patch"`.
 
 It turns repeated capability gaps into reviewed skill candidates. The product deliberately separates learning, generation, validation, and installation so an agent can improve itself without silently polluting its own skill set.
 
@@ -635,6 +635,7 @@ This version is considered a milestone because it has a real closed loop:
 - `v0.4.3 "Safety Tightening"`: safe skill slug containment for evolution updates and clearer registry safety posture
 - `v0.5.0 "Signed Gate"`: HMAC-signed approval tokens bound to skill identity and source content hash; missing or non-skill sources are refused before token issuance and before install mutation; dry-run approvals can no longer install or claim Telegram audit; replay regression gate compares candidate against installed baseline; manifest writes are atomic and `flock`-locked; redactor covers IPv4/IPv6, phone numbers, JWTs, common cloud/Git tokens, Telegram bot tokens, and PEM private keys
 - `v1.0.0 "Forge Console"`: product-level command surface with doctor, demo, forge, evolve, install, uninstall, feedback, replay, release-check, and version commands; release checks cover the console smoke path
+- `v1.0.1 "Forge Console Patch"`: normalize console JSON pass-through for demo, remove duplicate console shim, expose install/uninstall bot-token env forwarding, clarify doctor secret source, and avoid duplicate source-repo secret scans
 
 ## License
 

@@ -116,10 +116,11 @@ def check_console_doctor() -> None:
             ],
             env=env,
         )
-        assert_true(result["version"] == "1.0.0", "console doctor reported the wrong version")
+        assert_true(result["version"] == "1.0.1", "console doctor reported the wrong version")
         names = {item["name"]: item for item in result["checks"]}
         assert_true(names["skill-package"]["status"] == "ok", "console doctor did not find the skill package")
         assert_true(names["approval-secret"]["status"] == "ok", "console doctor did not find approval secret")
+        assert_true("explicit env" in names["approval-secret"]["detail"], "doctor should report explicit approval secret source")
 
 
 def check_console_demo() -> None:
@@ -137,9 +138,8 @@ def check_console_demo() -> None:
             ]
         )
         assert_true(result["status"] == "ok", "console demo command failed")
-        payload = result.get("result") or {}
-        assert_true(payload.get("install_status") == "planned", "console demo did not stay plan-only")
-        assert_true(payload.get("validation", {}).get("valid"), "console demo candidate did not validate")
+        assert_true(result.get("install_status") == "planned", "console demo did not stay plan-only")
+        assert_true(result.get("validation", {}).get("valid"), "console demo candidate did not validate")
 
 
 def check_install_gate() -> None:

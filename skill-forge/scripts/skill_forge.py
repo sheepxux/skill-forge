@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from lib.approval import derive_secret
+from lib.approval import APPROVAL_SECRET_ENV
 from lib.telegram_config import discover_telegram_config
 
 
@@ -72,16 +73,19 @@ def git_status() -> dict:
         capture_output=True,
     )
     status = subprocess.run(
-        ["git", "status", "--short", "--branch"],
+        ["git", "status", "--porcelain=v2", "--branch"],
         cwd=REPO_DIR,
         text=True,
         capture_output=True,
     )
+    lines = [line for line in status.stdout.splitlines() if line]
+    dirty_lines = [line for line in lines if not line.startswith("#")]
     return {
         "available": head.returncode == 0 and status.returncode == 0,
         "head": head.stdout.strip(),
         "status": status.stdout.strip(),
-        "clean": status.returncode == 0 and "\n" not in status.stdout.strip(),
+        "clean": status.returncode == 0 and not dirty_lines,
+        "dirty_entries": len(dirty_lines),
     }
 
 
@@ -94,9 +98,11 @@ def command_doctor(args: argparse.Namespace) -> int:
         load_defaults=not args.no_default_env_files,
     )
     token = os.getenv(config["token_env"] or args.telegram_bot_token_env)
+    secret_source = "missing"
     try:
         derive_secret(token)
         secret_ok = True
+        secret_source = "explicit env" if os.getenv(APPROVAL_SECRET_ENV) else "derived from bot token"
     except RuntimeError:
         secret_ok = False
 
@@ -130,8 +136,14 @@ def command_doctor(args: argparse.Namespace) -> int:
         status_item(
             "approval-secret",
             secret_ok,
-            "available" if secret_ok else "missing",
+            secret_source,
             "Set SKILL_FORGE_APPROVAL_SECRET or provide a Telegram bot token.",
+        ),
+        status_item(
+            "learnings-dir",
+            (Path.home() / ".openclaw" / "workspace" / ".learnings").exists(),
+            str(Path.home() / ".openclaw" / "workspace" / ".learnings"),
+            "Create it with: mkdir -p ~/.openclaw/workspace/.learnings",
         ),
         status_item(
             "clawhub-cli",
@@ -205,7 +217,7 @@ def command_demo(args: argparse.Namespace) -> int:
         args.agent_name,
         "--json",
     ]
-    return run_child(command, json_mode=args.json)
+    return run_child(command, json_mode=False)
 
 
 def command_forge(args: argparse.Namespace) -> int:
@@ -280,6 +292,8 @@ def command_install(args: argparse.Namespace) -> int:
         command.extend(["--approval-token", args.approval_token])
     if args.env_file:
         command.extend(["--env-file", args.env_file])
+    if args.bot_token_env:
+        command.extend(["--bot-token-env", args.bot_token_env])
     if args.json:
         command.append("--json")
     return run_child(command, json_mode=False)
@@ -304,6 +318,8 @@ def command_uninstall(args: argparse.Namespace) -> int:
         command.extend(["--approval-token", args.approval_token])
     if args.env_file:
         command.extend(["--env-file", args.env_file])
+    if args.bot_token_env:
+        command.extend(["--bot-token-env", args.bot_token_env])
     if args.json:
         command.append("--json")
     return run_child(command, json_mode=False)
@@ -382,22 +398,22 @@ def command_release_check(args: argparse.Namespace) -> int:
                 "stderr": completed.stderr.strip(),
             }
         )
-    scan_root = REPO_DIR if release_script.exists() else SKILL_DIR
-    secret_scan = subprocess.run(
-        [sys.executable, str(SCRIPT_DIR / "security" / "scan_secrets.py"), "--root", str(scan_root), "--json"],
-        cwd=scan_root,
-        text=True,
-        capture_output=True,
-    )
-    checks.append(
-        {
-            "name": "secret-scan",
-            "status": "ok" if secret_scan.returncode == 0 else "failed",
-            "returncode": secret_scan.returncode,
-            "stdout": secret_scan.stdout.strip(),
-            "stderr": secret_scan.stderr.strip(),
-        }
-    )
+    if not release_script.exists():
+        secret_scan = subprocess.run(
+            [sys.executable, str(SCRIPT_DIR / "security" / "scan_secrets.py"), "--root", str(SKILL_DIR), "--json"],
+            cwd=SKILL_DIR,
+            text=True,
+            capture_output=True,
+        )
+        checks.append(
+            {
+                "name": "secret-scan",
+                "status": "ok" if secret_scan.returncode == 0 else "failed",
+                "returncode": secret_scan.returncode,
+                "stdout": secret_scan.stdout.strip(),
+                "stderr": secret_scan.stderr.strip(),
+            }
+        )
     failed = [item for item in checks if item["status"] != "ok"]
     payload = {"status": "failed" if failed else "ok", "checks": checks}
     if args.json:
@@ -472,6 +488,7 @@ def build_parser() -> argparse.ArgumentParser:
     install.add_argument("--apply", action="store_true")
     install.add_argument("--approval-token", default="")
     install.add_argument("--env-file", default="")
+    install.add_argument("--bot-token-env", default="TELEGRAM_BOT_TOKEN")
     install.add_argument("--json", action="store_true")
     install.set_defaults(func=command_install)
 
@@ -483,6 +500,7 @@ def build_parser() -> argparse.ArgumentParser:
     uninstall.add_argument("--restore-backup", action="store_true")
     uninstall.add_argument("--approval-token", default="")
     uninstall.add_argument("--env-file", default="")
+    uninstall.add_argument("--bot-token-env", default="TELEGRAM_BOT_TOKEN")
     uninstall.add_argument("--json", action="store_true")
     uninstall.set_defaults(func=command_uninstall)
 

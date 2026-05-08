@@ -7,7 +7,7 @@ description: Detect repeated capability gaps, convert recurring user needs into 
 
 Use this skill to turn repeated demand into a reviewed skill candidate.
 
-Current version: `v1.0.0 "Forge Console"`.
+Current version: `v1.0.1 "Forge Console Patch"`.
 
 ## Core jobs
 
@@ -311,7 +311,6 @@ Scripts:
 - `scripts/validate_skill_candidate.py`
 - `scripts/forge_pipeline.py`
 - `scripts/skill_forge.py`
-- `scripts/forge_console.py`
 - `scripts/install/propose_skill_install.py`
 - `scripts/install/telegram_approval.py`
 - `scripts/evolve/evolve_skill_pipeline.py`
