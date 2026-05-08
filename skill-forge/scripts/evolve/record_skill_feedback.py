@@ -24,7 +24,7 @@ def record_feedback(args: argparse.Namespace) -> dict:
     payload = {
         "created_at": utc_now(),
         "skill": args.skill,
-        "agent": args.agent_name or None,
+        "agent": redact_text(args.agent_name) if args.agent_name else None,
         "rating": args.rating,
         "feedback": redact_text(args.feedback.strip()),
         "task": redact_text(args.task.strip()) if args.task else None,
@@ -34,8 +34,22 @@ def record_feedback(args: argparse.Namespace) -> dict:
         "source": args.source,
         "privacy": "redacted",
     }
+    line = json.dumps(payload, ensure_ascii=False) + "\n"
     with feedback_file.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        try:
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        except Exception:
+            pass
+        try:
+            handle.write(line)
+            handle.flush()
+        finally:
+            try:
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
     return {"recorded": True, "feedback_file": str(feedback_file), "entry": payload}
 
 

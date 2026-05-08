@@ -293,10 +293,10 @@ import json
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Replace this placeholder with deterministic skill logic.")
+    parser = argparse.ArgumentParser(description="Skill-specific deterministic entry point. Customize before publishing.")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-    payload = {"status": "placeholder", "next_step": "implement skill-specific logic"}
+    payload = {"status": "scaffold", "next_step": "wire deterministic behavior for this skill"}
     print(json.dumps(payload, indent=2) if args.json else payload["status"])
     return 0
 

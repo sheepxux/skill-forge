@@ -16,10 +16,10 @@ DEFAULT_SOURCES = [
 STOPWORDS = {
     "the", "and", "for", "that", "with", "from", "this", "have", "your", "will",
     "when", "what", "into", "they", "them", "then", "than", "need", "help",
-    "skill", "agent", "users", "user", "openclaw", "request", "feature",
-    "error", "task", "tasks", "workflow", "workflows", "ability", "capability",
+    "skill", "agent", "users", "user", "openclaw", "request",
+    "task", "tasks", "ability", "capability",
     "requested", "context", "dedicated", "support", "summary", "suggested",
-    "fix", "using", "same", "across", "repeated", "manual", "notes", "output",
+    "fix", "using", "same", "across", "repeated", "manual", "notes",
     "outputs", "created", "keeps", "add", "way", "section", "sections",
 }
 

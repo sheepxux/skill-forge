@@ -50,7 +50,12 @@ def send_telegram_report(markdown: str, args: argparse.Namespace) -> dict:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        return {"sent": False, "status": "send-error", "error": str(exc)}
+    if not payload.get("ok"):
+        return {"sent": False, "status": "telegram-error", "error": payload.get("description")}
     return {"sent": True, "status": "sent", "message_id": payload.get("result", {}).get("message_id")}
 

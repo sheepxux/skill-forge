@@ -7,7 +7,7 @@ description: Detect repeated capability gaps, convert recurring user needs into 
 
 Use this skill to turn repeated demand into a reviewed skill candidate.
 
-Current version: `v0.4.3 "Safety Tightening"`.
+Current version: `v0.5.0 "Signed Gate"`.
 
 ## Core jobs
 
@@ -91,13 +91,13 @@ python3 {baseDir}/scripts/validate_skill_candidate.py ./generated/my-skill
 
 ### Propose Installation
 
-Run:
+Plan only (safe to run anywhere, no Telegram, no secrets):
 
 ```bash
-python3 {baseDir}/scripts/propose_skill_install.py ./generated/my-skill
+python3 {baseDir}/scripts/propose_skill_install.py ./generated/my-skill --json
 ```
 
-Use `--apply` only after the candidate has been reviewed.
+`--apply` is gated by a signed approval token. Direct invocation without a token is blocked. Use the full pipeline (`forge_pipeline.py --install telegram`) for the normal install path, or call `telegram_approval.py` first and pass its `approval_token` to `propose_skill_install.py --apply --approval-token <token>`. The token is HMAC-bound to the skill name, target path, install method, source path, and a hash of the source directory's contents, so any post-approval edit invalidates it. Token issuance and install apply both require the source to be an existing skill directory containing `SKILL.md`.
 
 ### Record Feedback
 
@@ -122,9 +122,12 @@ python3 {baseDir}/scripts/evolve_skill_pipeline.py \
   --output ./generated-updates \
   --install plan \
   --replay hidden \
+  --min-replay-improvement 0 \
   --agent-name StudyAgent \
   --json
 ```
+
+When an installed copy of `my-skill` exists under `--target-root`, the candidate and the installed baseline are scored against the same redacted replay cases. The pipeline blocks the install when `candidate_score - baseline_score < --min-replay-improvement` (default `0`, i.e. no regression). Pass `--min-replay-improvement -100` to disable the regression check.
 
 ### Replay Evaluation
 
@@ -170,11 +173,29 @@ python3 {baseDir}/scripts/schedule_nightly_review.py \
 
 Use `--telegram-report` with `--env-file ~/.openclaw/skill-forge.env` when scheduled runs should send a summary report to Telegram. The env file should define `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`.
 
-Uninstall or rollback a generated skill:
+Uninstall or rollback a generated skill. Like install, `--uninstall --apply` requires a signed approval token issued by `telegram_approval.py` for the same skill, target, and method. Plan-only (no `--apply`) works without a token and just prints what would happen:
 
 ```bash
-python3 {baseDir}/scripts/propose_skill_install.py my-skill --uninstall --apply
-python3 {baseDir}/scripts/propose_skill_install.py my-skill --uninstall --restore-backup --apply
+# Plan (no token, no mutation)
+python3 {baseDir}/scripts/propose_skill_install.py my-skill --uninstall --json
+
+# Apply (requires a fresh approval token bound to the same skill/target/method)
+python3 {baseDir}/scripts/install/telegram_approval.py \
+  --skill my-skill \
+  --profile workflow \
+  --validation-score 100 --validation-grade milestone \
+  --evaluation-score 100 --evaluation-passed \
+  --target "$HOME/.openclaw/workspace/skills/my-skill" \
+  --method symlink \
+  --json > approval.json
+
+APPROVAL_TOKEN="$(python3 -c 'import json; print(json.load(open("approval.json"))["approval_token"])')"
+
+python3 {baseDir}/scripts/propose_skill_install.py my-skill \
+  --uninstall --apply \
+  --approval-token "$APPROVAL_TOKEN" \
+  --restore-backup \
+  --json
 ```
 
 ## Full Pipeline
@@ -213,14 +234,15 @@ python3 {baseDir}/scripts/forge_pipeline.py \
 - Prefer `scripts/` when the same code would otherwise be rewritten repeatedly.
 - Default to `--install plan`; use `--install telegram` for any mutation.
 - Treat `--install ask` and `--install auto` as blocked compatibility aliases.
-- Do not call `propose_skill_install.py --apply` directly; apply is guarded for Telegram-approved pipelines.
+- Do not call `propose_skill_install.py --apply` directly; `--apply` requires a signed approval token issued by `telegram_approval.py` and bound to the skill name, target, method, source path, and source content hash. The HMAC secret is `SKILL_FORGE_APPROVAL_SECRET` if set, otherwise derived from the bot token. Tokens default to a 30-minute TTL.
+- A dry-run approval token (`mode=dry-run`) cannot mutate state. The pipeline reports `install_status=dry-run-blocked` and only `--allow-dry-run-install` on the install script lets it through, in which case the audit field is `approved_by=dry-run`.
 - Keep `--eval hidden` for user-facing flows so simulated checks and prompts are not exposed.
 - Use `--agent-name` before installation when a specific agent will receive the skill.
 - Never hard-code Telegram tokens; discover them from OpenClaw/env files or environment variables.
 - Redact feedback text before storing it.
 - Treat feedback-driven changes as update candidates, not direct edits to installed skills.
 - Install evolved skills only after validation, hidden evaluation, authorization, and approval.
-- Use replay as a regression gate when feedback-derived cases exist.
+- Replay runs as a non-regression gate during evolution: baseline (currently installed) and candidate are scored against the same redacted cases, and the candidate is blocked if `score - baseline < --min-replay-improvement` (default `0`). Use `--min-replay-improvement -100` to disable. When no installed baseline exists the gate falls back to a single-skill coverage check.
 - Scheduled nightly review may propose updates, but install changes still require Telegram approval.
 - Nightly reports should show only health summaries, not hidden evaluation prompts or simulated checks.
 - Default nightly review scope is `managed`; use `--scope all` only for explicit full inventory audits.

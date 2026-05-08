@@ -19,7 +19,7 @@ DEFAULT_FEEDBACK_FILE = Path.home() / ".openclaw" / "workspace" / ".learnings" /
 DEFAULT_REPLAY_FILE = Path.home() / ".openclaw" / "workspace" / ".learnings" / "skill-replay-cases.jsonl"
 
 
-def run_replay(args: argparse.Namespace, candidate: str) -> Optional[dict]:
+def run_replay(args: argparse.Namespace, candidate: str, baseline: Optional[str]) -> Optional[dict]:
     if args.replay == "off":
         return None
     run_json(
@@ -36,6 +36,25 @@ def run_replay(args: argparse.Namespace, candidate: str) -> Optional[dict]:
         ],
         check=False,
     )
+    if baseline and Path(baseline).exists():
+        compare_cmd = [
+            sys.executable,
+            str(SCRIPTS_DIR / "replay" / "compare_replay_outputs.py"),
+            "--baseline",
+            baseline,
+            "--candidate",
+            candidate,
+            "--cases",
+            args.replay_cases,
+            "--skill",
+            args.skill,
+            "--min-score",
+            str(args.min_replay_score),
+            "--min-improvement",
+            str(args.min_replay_improvement),
+            "--json",
+        ]
+        return run_json(compare_cmd, check=False)
     command = [
         sys.executable,
         str(SCRIPTS_DIR / "replay" / "run_replay_eval.py"),
@@ -67,6 +86,12 @@ def main() -> int:
     parser.add_argument("--replay", choices=["off", "hidden"], default="hidden")
     parser.add_argument("--replay-cases", default=str(DEFAULT_REPLAY_FILE))
     parser.add_argument("--min-replay-score", type=int, default=70)
+    parser.add_argument(
+        "--min-replay-improvement",
+        type=int,
+        default=0,
+        help="Minimum candidate-vs-baseline replay score delta. Negative values disable the regression gate.",
+    )
     parser.add_argument("--agent-name", default="")
     parser.add_argument("--telegram-timeout", type=int, default=300)
     parser.add_argument("--telegram-bot-token-env", default="TELEGRAM_BOT_TOKEN")
@@ -115,7 +140,7 @@ def main() -> int:
         if args.eval == "details":
             eval_cmd.append("--show-details")
         evaluation = run_json(eval_cmd, check=False)
-    replay = run_replay(args, candidate)
+    replay = run_replay(args, candidate, proposal.get("source"))
     agent_policy = agent_authorization(args.agent_name, profile)
     plan = run_json(install_args(SCRIPTS_DIR, args, candidate))
     eligible, install_reason = install_eligibility(report, evaluation, replay, agent_policy, args.min_install_score)
@@ -132,8 +157,18 @@ def main() -> int:
         elif args.install == "telegram":
             approval = run_json(telegram_approval_args(SCRIPTS_DIR, args, plan, report, evaluation, profile), check=False)
             if approval.get("approved"):
-                plan = run_json(install_args(SCRIPTS_DIR, args, candidate, apply=True, approval=approval))
-                install_status = "installed"
+                claims = approval.get("approval_claims") or {}
+                if not approval.get("approval_token"):
+                    install_status = "approval-token-missing"
+                    install_reason = approval.get("token_error") or "approved response did not include a signed approval token"
+                elif claims.get("mode") == "dry-run":
+                    install_status = "dry-run-blocked"
+                    install_reason = "dry-run approval token is not allowed to mutate state"
+                else:
+                    plan = run_json(install_args(SCRIPTS_DIR, args, candidate, apply=True, approval=approval), check=False)
+                    install_status = "installed" if plan.get("installed") else "install-blocked"
+                    if not plan.get("installed"):
+                        install_reason = plan.get("reason", install_reason)
             else:
                 install_status = f"telegram-{approval.get('status', 'declined')}"
 

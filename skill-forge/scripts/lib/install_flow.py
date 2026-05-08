@@ -16,9 +16,14 @@ def install_args(scripts_dir: Path, args, skill_dir: str, apply: bool = False, a
     ]
     if apply:
         command.append("--apply")
-        command.append("--approved-by-telegram")
-        if approval and approval.get("request_id"):
-            command.extend(["--approval-request-id", str(approval["request_id"])])
+        if approval and approval.get("approval_token"):
+            command.extend(["--approval-token", approval["approval_token"]])
+        bot_token_env = getattr(args, "telegram_bot_token_env", "")
+        if bot_token_env:
+            command.extend(["--bot-token-env", bot_token_env])
+        env_file = getattr(args, "env_file", "")
+        if env_file:
+            command.extend(["--env-file", env_file])
     return command
 
 
@@ -48,6 +53,8 @@ def telegram_approval_args(
         plan["target"],
         "--method",
         plan["method"],
+        "--source-dir",
+        plan["source"],
         "--timeout",
         str(args.telegram_timeout),
         "--bot-token-env",
@@ -94,6 +101,11 @@ def install_eligibility(
     if evaluation and not evaluation.get("passed"):
         return False, "hidden evaluation failed"
     if replay and replay.get("cases_run", 0) > 0 and not replay.get("passed"):
+        baseline = replay.get("baseline_score")
+        candidate = replay.get("candidate_score") or replay.get("score")
+        improvement = replay.get("improvement")
+        if baseline is not None and improvement is not None:
+            return False, f"replay regression: baseline={baseline} candidate={candidate} delta={improvement}"
         return False, "replay evaluation failed"
     if not authorization.get("allowed", True):
         return False, authorization.get("reason", "agent authorization failed")

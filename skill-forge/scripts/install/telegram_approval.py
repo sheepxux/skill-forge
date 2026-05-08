@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.approval import derive_secret, hash_skill_dir, issue_token
 from lib.telegram_config import discover_telegram_config
 
 
@@ -74,11 +75,11 @@ def classify_response(text: str) -> Optional[bool]:
 
 
 def message_matches_request(message: dict, request_id: str, approval_message_id: int) -> bool:
-    text = message.get("text", "")
-    if request_id in text:
-        return True
     reply = message.get("reply_to_message") or {}
-    return reply.get("message_id") == approval_message_id
+    if reply.get("message_id") == approval_message_id:
+        return True
+    text = message.get("text", "")
+    return request_id in text
 
 
 def wait_for_approval(token: str, chat_id: str, request_id: str, message_id: int, timeout_seconds: int) -> dict:
@@ -116,6 +117,46 @@ def dry_run_result(mode: str, request_id: str) -> dict:
     return {"approved": False, "status": "timeout", "request_id": request_id, "dry_run": True}
 
 
+def build_token_claims(args: argparse.Namespace, request_id: str, mode: str) -> dict:
+    source_dir = ""
+    source_hash = ""
+    if args.source_dir:
+        source_path = Path(args.source_dir).expanduser().resolve()
+        if not source_path.is_dir():
+            raise ValueError("source-dir must be an existing skill directory")
+        if not (source_path / "SKILL.md").is_file():
+            raise ValueError("source-dir must contain SKILL.md")
+        source_dir = str(source_path)
+        source_hash = hash_skill_dir(source_path)
+    target = str(Path(args.target).expanduser().resolve()) if args.target else ""
+    return {
+        "request_id": request_id,
+        "skill": args.skill,
+        "profile": args.profile,
+        "source_dir": source_dir,
+        "source_hash": source_hash,
+        "target": target,
+        "method": args.method,
+        "mode": mode,
+    }
+
+
+def attach_token(payload: dict, args: argparse.Namespace, secret: Optional[bytes], mode: str) -> dict:
+    if secret is None:
+        payload["approval_token"] = None
+        payload["token_error"] = "no-secret-available"
+        return payload
+    try:
+        claims = build_token_claims(args, payload["request_id"], mode)
+    except ValueError as exc:
+        payload["approval_token"] = None
+        payload["token_error"] = f"invalid-source-dir: {exc}"
+        return payload
+    payload["approval_token"] = issue_token(claims, secret, ttl_seconds=args.token_ttl)
+    payload["approval_claims"] = claims
+    return payload
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Ask for Telegram approval before installing a generated skill.")
     parser.add_argument("--skill", required=True)
@@ -127,6 +168,8 @@ def main() -> int:
     parser.add_argument("--evaluation-passed", action="store_true")
     parser.add_argument("--target", required=True)
     parser.add_argument("--method", required=True)
+    parser.add_argument("--source-dir", default="", help="Candidate skill directory; bound to the issued approval token.")
+    parser.add_argument("--token-ttl", type=int, default=1800, help="Approval token lifetime in seconds.")
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--bot-token-env", default="TELEGRAM_BOT_TOKEN")
     parser.add_argument("--chat-id-env", default="TELEGRAM_CHAT_ID")
@@ -136,12 +179,7 @@ def main() -> int:
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
-    request_id = uuid.uuid4().hex[:8]
-    if args.dry_run != "off":
-        payload = dry_run_result(args.dry_run, request_id)
-        print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else payload["status"])
-        return 0 if payload["approved"] else 1
-
+    request_id = uuid.uuid4().hex[:16]
     config = discover_telegram_config(
         args.bot_token_env,
         args.chat_id_env,
@@ -150,6 +188,19 @@ def main() -> int:
     )
     token = os.getenv(config["token_env"] or args.bot_token_env)
     chat_id = os.getenv(config["chat_id_env"] or args.chat_id_env)
+
+    try:
+        secret = derive_secret(token)
+    except RuntimeError:
+        secret = None
+
+    if args.dry_run != "off":
+        payload = dry_run_result(args.dry_run, request_id)
+        if payload["approved"]:
+            payload = attach_token(payload, args, secret, mode="dry-run")
+        print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else payload["status"])
+        return 0 if payload["approved"] else 1
+
     if not token or not chat_id:
         payload = {
             "approved": False,
@@ -161,18 +212,52 @@ def main() -> int:
         print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else payload["status"])
         return 1
 
-    sent = post_json(
-        token,
-        "sendMessage",
-        {
-            "chat_id": chat_id,
-            "text": approval_message(args, request_id),
-            "disable_web_page_preview": True,
-        },
-    )
+    try:
+        sent = post_json(
+            token,
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": approval_message(args, request_id),
+                "disable_web_page_preview": True,
+            },
+        )
+    except Exception as exc:
+        payload = {
+            "approved": False,
+            "status": "send-error",
+            "request_id": request_id,
+            "error": str(exc),
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else payload["status"])
+        return 1
+
+    if not sent.get("ok"):
+        payload = {
+            "approved": False,
+            "status": "telegram-error",
+            "request_id": request_id,
+            "error": sent.get("description") or "telegram sendMessage failed",
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else payload["status"])
+        return 1
+
     message_id = sent["result"]["message_id"]
-    payload = wait_for_approval(token, chat_id, request_id, message_id, args.timeout)
+    try:
+        payload = wait_for_approval(token, chat_id, request_id, message_id, args.timeout)
+    except Exception as exc:
+        payload = {
+            "approved": False,
+            "status": "poll-error",
+            "request_id": request_id,
+            "error": str(exc),
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else payload["status"])
+        return 1
+
     payload["message_id"] = message_id
+    if payload["approved"] and secret is not None:
+        payload = attach_token(payload, args, secret, mode="telegram")
     print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else payload["status"])
     return 0 if payload["approved"] else 1
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import os
 import subprocess
@@ -11,6 +12,8 @@ from typing import Optional
 REPO = Path(__file__).resolve().parents[1]
 SKILL_FORGE = REPO / "skill-forge"
 SOMNIA = REPO.parent / "somnia"
+sys.path.insert(0, str(SKILL_FORGE / "scripts"))
+from lib.approval import issue_token
 
 
 def run(command: list[str], check: bool = True, env: Optional[dict] = None) -> subprocess.CompletedProcess:
@@ -109,11 +112,37 @@ def check_install_gate() -> None:
             ],
             check=False,
         )
-        assert_true(result["status"] == "blocked", "direct apply was not blocked")
+        assert_true(result["status"] == "blocked", "direct apply without token was not blocked")
+        assert_true("token" in result.get("reason", ""), "block reason should mention approval token")
         assert_true(not (Path(target) / "skill-forge").exists(), "direct apply created target")
 
 
-def check_telegram_dry_run_install() -> None:
+def check_install_rejects_forged_token() -> None:
+    env = os.environ.copy()
+    env["SKILL_FORGE_APPROVAL_SECRET"] = "release-check-secret"
+    with tempfile.TemporaryDirectory() as target:
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "install" / "propose_skill_install.py"),
+                str(SKILL_FORGE),
+                "--target-root",
+                target,
+                "--apply",
+                "--approval-token",
+                "deadbeef.cafef00d",
+                "--json",
+            ],
+            check=False,
+            env=env,
+        )
+        assert_true(result["status"] == "blocked", "forged token was not blocked")
+        assert_true(not (Path(target) / "skill-forge").exists(), "forged token created target")
+
+
+def check_telegram_dry_run_blocked() -> None:
+    env = os.environ.copy()
+    env["SKILL_FORGE_APPROVAL_SECRET"] = "release-check-secret"
     with tempfile.TemporaryDirectory() as output, tempfile.TemporaryDirectory() as target:
         result = run_json(
             [
@@ -136,10 +165,360 @@ def check_telegram_dry_run_install() -> None:
                 "--agent-name",
                 "StudyAgent",
                 "--json",
-            ]
+            ],
+            env=env,
         )
-        assert_true(result["install_status"] == "installed", "telegram dry-run did not install")
-        assert_true(result["install_plan"].get("approved_by") == "telegram", "install audit missing telegram approval")
+        assert_true(
+            result["install_status"] == "dry-run-blocked",
+            f"dry-run approval was not blocked: {result['install_status']}",
+        )
+        assert_true(
+            not (Path(target) / "citation-helper").exists(),
+            "dry-run approval still created the install target",
+        )
+        approval = result.get("approval") or {}
+        claims = approval.get("approval_claims") or {}
+        assert_true(claims.get("mode") == "dry-run", "dry-run token should declare mode=dry-run")
+
+
+def check_dry_run_without_secret_has_no_token() -> None:
+    env = os.environ.copy()
+    env.pop("SKILL_FORGE_APPROVAL_SECRET", None)
+    for key in [
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID",
+        "OPENCLAW_TELEGRAM_BOT_TOKEN",
+        "OPENCLAW_TELEGRAM_CHAT_ID",
+    ]:
+        env.pop(key, None)
+    result = run_json(
+        [
+            sys.executable,
+            str(SKILL_FORGE / "scripts" / "install" / "telegram_approval.py"),
+            "--skill",
+            "example",
+            "--profile",
+            "workflow",
+            "--validation-score",
+            "100",
+            "--validation-grade",
+            "milestone",
+            "--evaluation-score",
+            "100",
+            "--evaluation-passed",
+            "--target",
+            "/tmp/example",
+            "--method",
+            "symlink",
+            "--source-dir",
+            str(SKILL_FORGE),
+            "--bot-token-env",
+            "SKILL_FORGE_TEST_NO_TOKEN",
+            "--chat-id-env",
+            "SKILL_FORGE_TEST_NO_CHAT",
+            "--no-default-env-files",
+            "--dry-run",
+            "approve",
+            "--json",
+        ],
+        env=env,
+    )
+    assert_true(result["approved"], "dry-run approve should still approve")
+    assert_true(result.get("approval_token") is None, "dry-run without a secret should not mint a token")
+    assert_true(result.get("token_error") == "no-secret-available", "missing token error was not surfaced")
+
+
+def check_pipeline_blocks_when_token_missing() -> None:
+    env = os.environ.copy()
+    for key in [
+        "SKILL_FORGE_APPROVAL_SECRET",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID",
+        "OPENCLAW_TELEGRAM_BOT_TOKEN",
+        "OPENCLAW_TELEGRAM_CHAT_ID",
+    ]:
+        env.pop(key, None)
+    with tempfile.TemporaryDirectory() as fake_home, \
+         tempfile.TemporaryDirectory() as output, \
+         tempfile.TemporaryDirectory() as target:
+        env["HOME"] = fake_home
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "forge_pipeline.py"),
+                "--source",
+                str(SKILL_FORGE / "examples" / "sample-feature-requests.md"),
+                "--source",
+                str(SKILL_FORGE / "examples" / "sample-errors.md"),
+                "--output",
+                output,
+                "--target-root",
+                target,
+                "--eval",
+                "hidden",
+                "--install",
+                "telegram",
+                "--telegram-dry-run",
+                "approve",
+                "--agent-name",
+                "StudyAgent",
+                "--json",
+            ],
+            env=env,
+        )
+        assert_true(
+            result["install_status"] == "approval-token-missing",
+            f"missing token did not block install: {result.get('install_status')}",
+        )
+        assert_true(
+            not any(Path(target).iterdir()),
+            "approval-token-missing path still mutated the target root",
+        )
+        approval = result.get("approval") or {}
+        assert_true(approval.get("approved") is True, "approval should still report approved=true")
+        assert_true(approval.get("approval_token") is None, "approval_token should be absent when no secret")
+        assert_true(approval.get("token_error") == "no-secret-available", "token_error must be surfaced")
+
+
+def _scaffold_candidate(parent: Path, skill_name: str = "release-check-skill") -> Path:
+    run(
+        [
+            sys.executable,
+            str(SKILL_FORGE / "scripts" / "generate_skill_scaffold.py"),
+            "--skill-name",
+            skill_name,
+            "--output",
+            str(parent),
+            "--goal",
+            f"{skill_name} validates the install gate end to end.",
+            "--triggers",
+            "release-check, gate audit, signed token",
+            "--template",
+            "workflow",
+        ]
+    )
+    return parent / skill_name
+
+
+def _issue_token(env: dict, skill: str, source: Path, target: str, ttl: int = 600) -> str:
+    payload = run_json(
+        [
+            sys.executable,
+            str(SKILL_FORGE / "scripts" / "install" / "telegram_approval.py"),
+            "--skill",
+            skill,
+            "--profile",
+            "workflow",
+            "--validation-score",
+            "100",
+            "--validation-grade",
+            "milestone",
+            "--evaluation-score",
+            "100",
+            "--evaluation-passed",
+            "--target",
+            target,
+            "--method",
+            "symlink",
+            "--source-dir",
+            str(source),
+            "--token-ttl",
+            str(ttl),
+            "--bot-token-env",
+            "SKILL_FORGE_TEST_NO_TOKEN",
+            "--chat-id-env",
+            "SKILL_FORGE_TEST_NO_CHAT",
+            "--no-default-env-files",
+            "--dry-run",
+            "approve",
+            "--json",
+        ],
+        env=env,
+    )
+    assert_true(payload.get("approved") is True, "approval helper did not approve")
+    token = payload.get("approval_token")
+    assert_true(bool(token), "approval helper did not mint a token")
+    return token
+
+
+def check_install_with_valid_token_succeeds() -> None:
+    env = os.environ.copy()
+    env["SKILL_FORGE_APPROVAL_SECRET"] = "release-check-secret"
+    with tempfile.TemporaryDirectory() as gen, tempfile.TemporaryDirectory() as target:
+        candidate = _scaffold_candidate(Path(gen))
+        target_path = str(Path(target) / candidate.name)
+        token = _issue_token(env, candidate.name, candidate, target_path)
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "install" / "propose_skill_install.py"),
+                str(candidate),
+                "--target-root",
+                target,
+                "--method",
+                "symlink",
+                "--apply",
+                "--approval-token",
+                token,
+                "--allow-dry-run-install",
+                "--json",
+            ],
+            env=env,
+        )
+        assert_true(result.get("installed") is True, f"valid token did not install: {result}")
+        assert_true(result.get("approved_by") == "dry-run", "dry-run audit field should be dry-run")
+        installed = Path(target_path)
+        assert_true(installed.is_symlink() or installed.exists(), "install target was not created")
+
+
+def check_install_rejects_tampered_source() -> None:
+    env = os.environ.copy()
+    env["SKILL_FORGE_APPROVAL_SECRET"] = "release-check-secret"
+    with tempfile.TemporaryDirectory() as gen, tempfile.TemporaryDirectory() as target:
+        candidate = _scaffold_candidate(Path(gen))
+        target_path = str(Path(target) / candidate.name)
+        token = _issue_token(env, candidate.name, candidate, target_path)
+        skill_md = candidate / "SKILL.md"
+        skill_md.write_text(skill_md.read_text(encoding="utf-8") + "\n<!-- tamper -->\n", encoding="utf-8")
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "install" / "propose_skill_install.py"),
+                str(candidate),
+                "--target-root",
+                target,
+                "--method",
+                "symlink",
+                "--apply",
+                "--approval-token",
+                token,
+                "--allow-dry-run-install",
+                "--json",
+            ],
+            check=False,
+            env=env,
+        )
+        assert_true(result.get("status") == "blocked", f"tampered source was not blocked: {result}")
+        reason = result.get("reason", "")
+        assert_true(
+            "source_hash" in reason or "claim-mismatch" in reason,
+            f"block reason should mention source_hash or claim-mismatch: {reason}",
+        )
+        assert_true(not Path(target_path).exists() and not Path(target_path).is_symlink(),
+                    "tampered apply still created the install target")
+
+
+def check_approval_rejects_missing_source() -> None:
+    env = os.environ.copy()
+    env["SKILL_FORGE_APPROVAL_SECRET"] = "release-check-secret"
+    with tempfile.TemporaryDirectory() as gen, tempfile.TemporaryDirectory() as target:
+        missing_source = Path(gen) / "missing-skill"
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "install" / "telegram_approval.py"),
+                "--skill",
+                "missing-skill",
+                "--profile",
+                "workflow",
+                "--validation-score",
+                "100",
+                "--validation-grade",
+                "milestone",
+                "--evaluation-score",
+                "100",
+                "--evaluation-passed",
+                "--target",
+                str(Path(target) / "missing-skill"),
+                "--method",
+                "symlink",
+                "--source-dir",
+                str(missing_source),
+                "--bot-token-env",
+                "SKILL_FORGE_TEST_NO_TOKEN",
+                "--chat-id-env",
+                "SKILL_FORGE_TEST_NO_CHAT",
+                "--no-default-env-files",
+                "--dry-run",
+                "approve",
+                "--json",
+            ],
+            env=env,
+        )
+        assert_true(result.get("approved") is True, "dry-run approval should still record the decision")
+        assert_true(result.get("approval_token") is None, "missing source should not receive a token")
+        assert_true(
+            str(result.get("token_error", "")).startswith("invalid-source-dir:"),
+            "missing source should surface invalid-source-dir token_error",
+        )
+        assert_true(
+            not (Path(target) / "missing-skill").exists()
+            and not (Path(target) / "missing-skill").is_symlink(),
+            "missing source approval mutated target",
+        )
+
+
+def check_install_rejects_missing_source_even_with_token() -> None:
+    env = os.environ.copy()
+    env["SKILL_FORGE_APPROVAL_SECRET"] = "release-check-secret"
+    with tempfile.TemporaryDirectory() as gen, tempfile.TemporaryDirectory() as target:
+        missing_source = (Path(gen) / "missing-skill").resolve()
+        target_path = Path(target) / "missing-skill"
+        secret = hashlib.sha256(b"release-check-secret").digest()
+        token = issue_token(
+            {
+                "request_id": "release-check-missing-source",
+                "skill": "missing-skill",
+                "profile": "workflow",
+                "source_dir": str(missing_source),
+                "source_hash": "missing",
+                "target": str(target_path),
+                "method": "symlink",
+                "mode": "dry-run",
+            },
+            secret,
+            ttl_seconds=600,
+        )
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "install" / "propose_skill_install.py"),
+                str(missing_source),
+                "--target-root",
+                target,
+                "--method",
+                "symlink",
+                "--apply",
+                "--approval-token",
+                token,
+                "--allow-dry-run-install",
+                "--json",
+            ],
+            check=False,
+            env=env,
+        )
+        assert_true(result.get("status") == "blocked", f"missing source was not blocked: {result}")
+        assert_true("candidate skill directory" in result.get("reason", ""), "block reason should mention source dir")
+        assert_true(not target_path.exists() and not target_path.is_symlink(), "missing source created target")
+
+
+def check_uninstall_apply_requires_token() -> None:
+    with tempfile.TemporaryDirectory() as target:
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "install" / "propose_skill_install.py"),
+                "any-skill",
+                "--target-root",
+                target,
+                "--uninstall",
+                "--apply",
+                "--json",
+            ],
+            check=False,
+        )
+        assert_true(result.get("status") == "blocked", "uninstall --apply without token was not blocked")
+        assert_true("token" in result.get("reason", ""), "uninstall block reason should mention approval token")
 
 
 def check_telegram_missing_config() -> None:
@@ -235,7 +614,15 @@ def main() -> int:
         ("skill-validation", check_skill_validation),
         ("forge-plan", check_forge_plan),
         ("install-gate", check_install_gate),
-        ("telegram-dry-run-install", check_telegram_dry_run_install),
+        ("install-forged-token", check_install_rejects_forged_token),
+        ("install-with-valid-token", check_install_with_valid_token_succeeds),
+        ("install-rejects-tampered-source", check_install_rejects_tampered_source),
+        ("approval-rejects-missing-source", check_approval_rejects_missing_source),
+        ("install-rejects-missing-source", check_install_rejects_missing_source_even_with_token),
+        ("uninstall-apply-requires-token", check_uninstall_apply_requires_token),
+        ("telegram-dry-run-blocked", check_telegram_dry_run_blocked),
+        ("dry-run-without-secret", check_dry_run_without_secret_has_no_token),
+        ("pipeline-blocks-when-token-missing", check_pipeline_blocks_when_token_missing),
         ("telegram-missing-config", check_telegram_missing_config),
         ("update-path-guard", check_update_path_guard),
         ("somnia-review", check_somnia_review),

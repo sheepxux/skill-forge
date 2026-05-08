@@ -122,12 +122,15 @@ def main() -> int:
 
     plist_path = Path(args.plist).expanduser().resolve()
     if args.uninstall:
-        result = unload(plist_path)
-        removed = False
-        if args.apply and plist_path.exists():
-            plist_path.unlink()
-            removed = True
-        payload = {"status": "uninstalled" if removed else "planned-uninstall", "plist": str(plist_path), "launchctl": result}
+        if args.apply:
+            result = unload(plist_path)
+            removed = False
+            if plist_path.exists():
+                plist_path.unlink()
+                removed = True
+            payload = {"status": "uninstalled" if removed else "uninstalled-noop", "plist": str(plist_path), "launchctl": result}
+        else:
+            payload = {"status": "planned-uninstall", "plist": str(plist_path)}
         print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else payload["status"])
         return 0
 

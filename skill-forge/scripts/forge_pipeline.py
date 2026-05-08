@@ -158,8 +158,18 @@ def main() -> int:
         elif args.install == "telegram":
             approval = run_json(telegram_approval_args(BASE_DIR, args, plan, report, evaluation, profile), check=False)
             if approval.get("approved"):
-                plan = run_json(install_args(BASE_DIR, args, skill_dir, apply=True, approval=approval))
-                install_status = "installed"
+                claims = approval.get("approval_claims") or {}
+                if not approval.get("approval_token"):
+                    install_status = "approval-token-missing"
+                    install_reason = approval.get("token_error") or "approved response did not include a signed approval token"
+                elif claims.get("mode") == "dry-run":
+                    install_status = "dry-run-blocked"
+                    install_reason = "dry-run approval token is not allowed to mutate state"
+                else:
+                    plan = run_json(install_args(BASE_DIR, args, skill_dir, apply=True, approval=approval), check=False)
+                    install_status = "installed" if plan.get("installed") else "install-blocked"
+                    if not plan.get("installed"):
+                        install_reason = plan.get("reason", install_reason)
             else:
                 install_status = f"telegram-{approval.get('status', 'declined')}"
 

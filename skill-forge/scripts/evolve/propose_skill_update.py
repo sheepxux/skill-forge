@@ -110,8 +110,18 @@ def ensure_reference_link(skill_md: Path, reference_name: str) -> None:
     link = f"- `references/{reference_name}`"
     if link in content:
         return
-    if "## Resources" in content and "References:" in content:
-        content = content.rstrip() + f"\n{link}\n"
+    pattern = re.compile(r"(?ms)^(References:\n(?:- .*\n?)*)")
+    match = pattern.search(content)
+    if match:
+        block = match.group(1).rstrip("\n") + "\n" + link + "\n"
+        content = content[: match.start()] + block + content[match.end():]
+    elif "## Resources" in content:
+        content = re.sub(
+            r"(?ms)(^## Resources\s*\n)",
+            lambda m: m.group(1) + "\nReferences:\n" + link + "\n",
+            content,
+            count=1,
+        )
     else:
         content = content.rstrip() + f"\n\n## Resources\n\nReferences:\n{link}\n"
     skill_md.write_text(content, encoding="utf-8")
@@ -127,12 +137,17 @@ def add_trigger_cues(skill_md: Path, triggers: list[str]) -> list[str]:
         return []
     insertion = "\n".join(f"- `{trigger}`" for trigger in to_add)
     if "## Trigger Cues" in content:
-        content = re.sub(
-            r"(?ms)(## Trigger Cues.*?Use this skill when the user mentions:\n\n)(.*?)(\n## )",
+        pattern = re.compile(
+            r"(?ms)(## Trigger Cues.*?Use this skill when the user mentions:\n\n)(.*?)(\n## |\Z)"
+        )
+        new_content, replacements = pattern.subn(
             lambda match: match.group(1) + match.group(2).rstrip() + "\n" + insertion + match.group(3),
             content,
             count=1,
         )
+        if replacements == 0:
+            new_content = content.rstrip() + "\n" + insertion + "\n"
+        content = new_content
     else:
         content += "\n\n## Trigger Cues\n\nUse this skill when the user mentions:\n\n" + insertion + "\n"
     skill_md.write_text(content, encoding="utf-8")

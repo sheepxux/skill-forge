@@ -63,8 +63,9 @@ def main() -> int:
     text = read_skill_text(skill_dir)
     results = [case_score(text, case) for case in cases]
     avg = round(sum(item["score"] for item in results) / len(results)) if results else 0
+    status = "no-cases" if not results else "ok"
     payload = {
-        "status": "ok",
+        "status": status,
         "skill": args.skill or skill_dir.name,
         "cases_run": len(results),
         "score": avg,
@@ -74,7 +75,9 @@ def main() -> int:
     if args.output:
         write_json(Path(args.output).expanduser(), {**payload, "case_results": results})
     print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else payload["status"])
-    return 0 if payload["passed"] or not results else 1
+    if not results:
+        return 0
+    return 0 if payload["passed"] else 1
 
 
 if __name__ == "__main__":

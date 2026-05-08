@@ -11,7 +11,7 @@ This repository contains the `skill-forge` OpenClaw-compatible skill. It also su
 
 `skill-forge` is a milestone self-improvement product for OpenClaw-style agents.
 
-Current version: `v0.4.3 "Safety Tightening"`.
+Current version: `v0.5.0 "Signed Gate"`.
 
 It turns repeated capability gaps into reviewed skill candidates. The product deliberately separates learning, generation, validation, and installation so an agent can improve itself without silently polluting its own skill set.
 
@@ -190,7 +190,7 @@ Root-level wrappers remain under `skill-forge/scripts/*.py` for backward compati
 
 ## Fast Demo
 
-Run the full pipeline:
+Run the plan-only pipeline (no installs, no Telegram, no secrets needed):
 
 ```bash
 python3 skill-forge/scripts/forge_pipeline.py \
@@ -207,13 +207,16 @@ Expected behavior:
 - classifies it as `academic`
 - generates `generated-milestone/citation-helper`
 - validates it as `grade=milestone`
-- prints an install plan for OpenClaw
+- prints an install plan for OpenClaw and exits with `install_status=planned`
 
-Ask through Telegram before installing:
+Install with Telegram-signed approval:
 
 ```bash
 export TELEGRAM_BOT_TOKEN="..."
 export TELEGRAM_CHAT_ID="..."
+# Optional: explicit HMAC secret for signed approval tokens.
+# When unset, the secret is derived deterministically from TELEGRAM_BOT_TOKEN.
+export SKILL_FORGE_APPROVAL_SECRET="..."
 
 python3 skill-forge/scripts/forge_pipeline.py \
   --source skill-forge/examples/sample-feature-requests.md \
@@ -223,6 +226,28 @@ python3 skill-forge/scripts/forge_pipeline.py \
   --agent-name StudyAgent \
   --json
 ```
+
+What `--install telegram` does internally:
+
+1. Generates and validates the candidate.
+2. Sends a Telegram approval request bound to the skill name, target path, install method, candidate source path, and a SHA-256 hash of the source directory. The source must be an existing skill directory containing `SKILL.md`.
+3. On approval, the bot reply causes `telegram_approval.py` to issue an HMAC-SHA256-signed token that carries those same claims.
+4. `propose_skill_install.py --apply` is invoked with `--approval-token <token>` and verifies signature, expiry, and every claim before mutating anything. Tampering with the candidate between approval and apply invalidates the token.
+
+Dry-run preview without sending a Telegram message:
+
+```bash
+python3 skill-forge/scripts/forge_pipeline.py \
+  --source skill-forge/examples/sample-feature-requests.md \
+  --source skill-forge/examples/sample-errors.md \
+  --output ./generated-milestone \
+  --install telegram \
+  --telegram-dry-run approve \
+  --agent-name StudyAgent \
+  --json
+```
+
+This issues a `mode=dry-run` token and exits with `install_status=dry-run-blocked`. The candidate target is **not** created. This is the expected safe behavior — dry-run tokens cannot mutate state.
 
 ## Manual Workflow
 
@@ -253,14 +278,61 @@ python3 skill-forge/scripts/validate_skill_candidate.py \
   ./generated/citation-helper
 ```
 
-### 4. Propose installation
+### 4. Propose installation (plan only)
 
 ```bash
 python3 skill-forge/scripts/propose_skill_install.py \
-  ./generated/citation-helper
+  ./generated/citation-helper \
+  --json
 ```
 
-### 5. Record feedback after use
+This prints the install plan without mutating anything. To actually install, see §5 — `--apply` is gated by a signed approval token and the script will block direct apply attempts.
+
+### 5. Real-world install with signed approval
+
+Generate the install plan:
+
+```bash
+python3 skill-forge/scripts/propose_skill_install.py \
+  ./generated/citation-helper \
+  --target-root ~/.openclaw/workspace/skills \
+  --method symlink \
+  --json
+```
+
+Ask Telegram for approval and write the signed token response:
+
+```bash
+python3 skill-forge/scripts/install/telegram_approval.py \
+  --skill citation-helper \
+  --profile academic \
+  --validation-score 100 \
+  --validation-grade milestone \
+  --evaluation-score 100 \
+  --evaluation-passed \
+  --target "$HOME/.openclaw/workspace/skills/citation-helper" \
+  --method symlink \
+  --source-dir "$(pwd)/generated/citation-helper" \
+  --json > approval.json
+```
+
+Apply only with the signed approval token:
+
+```bash
+APPROVAL_TOKEN="$(python3 -c 'import json; print(json.load(open("approval.json"))["approval_token"])')"
+
+python3 skill-forge/scripts/propose_skill_install.py \
+  ./generated/citation-helper \
+  --target-root ~/.openclaw/workspace/skills \
+  --method symlink \
+  --apply \
+  --approval-token "$APPROVAL_TOKEN" \
+  --json
+```
+
+The token is bound to the source directory and its content hash. If the candidate changes after approval, or if the source is missing / not a real skill directory, the install is blocked and a new valid approval is required.
+
+### 6. Record feedback after use
 
 ```bash
 python3 skill-forge/scripts/record_skill_feedback.py \
@@ -271,7 +343,7 @@ python3 skill-forge/scripts/record_skill_feedback.py \
   --json
 ```
 
-### 6. Propose a reviewed update
+### 7. Propose a reviewed update
 
 ```bash
 python3 skill-forge/scripts/evolve_skill_pipeline.py \
@@ -279,25 +351,50 @@ python3 skill-forge/scripts/evolve_skill_pipeline.py \
   --output ./generated-updates \
   --install telegram \
   --replay hidden \
+  --min-replay-improvement 0 \
   --agent-name StudyAgent \
   --json
 ```
 
-### 7. Run replay evaluation
+When an installed copy of `citation-helper` exists under `--target-root`, the pipeline runs the candidate **and** the installed baseline against the same redacted replay cases and blocks the install if `candidate_score - baseline_score < --min-replay-improvement` (default `0`, i.e. no regression allowed). Pass `--min-replay-improvement -100` to disable the regression gate while still running the coverage check.
+
+The same signed-token gate from §5 applies: once Telegram approves, the pipeline verifies a fresh approval token bound to the *update candidate* before swapping it in.
+
+### 8. Run replay evaluation manually
+
+Build redacted cases from feedback:
 
 ```bash
 python3 skill-forge/scripts/replay/collect_replay_cases.py \
   --feedback-file ~/.openclaw/workspace/.learnings/skill-feedback.jsonl \
   --skill citation-helper \
   --json
+```
 
+Score a single skill directory (used for coverage when no baseline exists):
+
+```bash
 python3 skill-forge/scripts/replay/run_replay_eval.py \
   --skill-dir ./generated-updates/citation-helper \
   --skill citation-helper \
   --json
 ```
 
-### 8. Run nightly review
+Compare a candidate against an installed baseline (the actual non-regression gate):
+
+```bash
+python3 skill-forge/scripts/replay/compare_replay_outputs.py \
+  --baseline ~/.openclaw/workspace/skills/citation-helper \
+  --candidate ./generated-updates/citation-helper \
+  --cases ~/.openclaw/workspace/.learnings/skill-replay-cases.jsonl \
+  --skill citation-helper \
+  --min-improvement 0 \
+  --json
+```
+
+Exit code is non-zero when the candidate regresses by more than `--min-improvement`.
+
+### 9. Run nightly review
 
 ```bash
 python3 skill-forge/scripts/nightly_skill_review.py \
@@ -308,7 +405,7 @@ python3 skill-forge/scripts/nightly_skill_review.py \
   --json
 ```
 
-### 9. Schedule nightly review on macOS
+### 10. Schedule nightly review on macOS
 
 ```bash
 python3 skill-forge/scripts/schedule_nightly_review.py \
@@ -346,9 +443,16 @@ Replay evaluation is offline and privacy-aware by default. It builds redacted ca
 Installation modes:
 
 - `--install plan`: default, only prints the install plan.
-- `--install telegram`: sends a Telegram approval request and installs only after approval.
+- `--install telegram`: sends a Telegram approval request and installs only after approval, then verifies the signed approval token before mutating any state.
 - `--install ask`: blocked compatibility alias; local approvals cannot mutate skills.
 - `--install auto`: blocked compatibility alias; silent auto-install is disabled.
+
+How the install gate works:
+
+- `telegram_approval.py` issues an HMAC-SHA256-signed approval token bound to the skill name, target path, install method, source path, source content hash, request ID, and an expiry (default 30 minutes).
+- `propose_skill_install.py --apply` rejects unsigned, malformed, expired, or content-mismatched tokens. There is no longer an `--approved-by-telegram` boolean; the token *is* the gate.
+- The HMAC secret comes from `SKILL_FORGE_APPROVAL_SECRET` if set, otherwise it is derived deterministically from the bot token (so any environment that can reach the bot can verify tokens issued there).
+- A dry-run-mode token (issued via `--telegram-dry-run approve`) carries `mode=dry-run` and is refused by `--apply` unless `--allow-dry-run-install` is passed; when allowed, the audit field is `approved_by=dry-run` rather than `telegram`. Pipelines surface this as `install_status=dry-run-blocked`.
 
 Telegram approval uses these environment variables by default:
 
@@ -367,12 +471,12 @@ Config discovery order:
 
 OpenClaw-style aliases are also supported: `OPENCLAW_TELEGRAM_BOT_TOKEN` and `OPENCLAW_TELEGRAM_CHAT_ID`.
 
-Approval replies accepted by default:
+Approval replies accepted by default (case-insensitive, single-word match):
 
-- approve: `同意安装`, `同意`, `yes`, `y`, `approve`
-- reject: `拒绝安装`, `拒绝`, `no`, `n`, `reject`
+- approve: `y`, `yes`, `approve`, `approved`, `同意`, `同意安装`, `安装`, `确认`
+- reject: `n`, `no`, `reject`, `rejected`, `拒绝`, `拒绝安装`, `取消`, `不同意`
 
-For safety, non-reply approval messages must include the request ID shown in the Telegram approval message.
+The approval bot prefers Telegram replies (`reply_to_message`) over plain-text matches. For non-reply messages, the request ID printed in the approval message must appear in the body to bind the approval to the right request.
 
 Evaluation modes:
 
@@ -385,6 +489,8 @@ Replay modes:
 - `--replay hidden`: default for evolution and nightly review, runs replay checks and hides case details.
 - `--replay off`: disables replay evaluation.
 
+When an installed baseline of the skill exists, the evolve pipeline runs both the installed and candidate copies against the same redacted cases and blocks the install if `candidate - baseline < --min-replay-improvement` (default `0`). Pass `--min-replay-improvement -100` to disable the regression check while keeping coverage scoring.
+
 Nightly review outputs:
 
 - JSON and Markdown reports under `~/.openclaw/workspace/.learnings/skill-forge-nightly`.
@@ -396,11 +502,32 @@ For scheduled Telegram reports, put `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` 
 Rollback and uninstall:
 
 ```bash
-python3 skill-forge/scripts/propose_skill_install.py citation-helper --uninstall
-python3 skill-forge/scripts/propose_skill_install.py citation-helper --uninstall --restore-backup
+# Plan-only (no token, no mutation)
+python3 skill-forge/scripts/propose_skill_install.py citation-helper --uninstall --json
+python3 skill-forge/scripts/propose_skill_install.py citation-helper --uninstall --restore-backup --json
 ```
 
-Direct `--apply` is intentionally guarded and requires a Telegram-approved pipeline to pass the internal approval marker.
+Apply requires the same signed approval token as install. Issue an approval bound to the same skill name, target, and method first:
+
+```bash
+python3 skill-forge/scripts/install/telegram_approval.py \
+  --skill citation-helper \
+  --profile academic \
+  --validation-score 100 --validation-grade milestone \
+  --evaluation-score 100 --evaluation-passed \
+  --target "$HOME/.openclaw/workspace/skills/citation-helper" \
+  --method symlink \
+  --json > approval.json
+
+APPROVAL_TOKEN="$(python3 -c 'import json; print(json.load(open("approval.json"))["approval_token"])')"
+
+python3 skill-forge/scripts/propose_skill_install.py citation-helper \
+  --uninstall --apply --restore-backup \
+  --approval-token "$APPROVAL_TOKEN" \
+  --json
+```
+
+Direct `--apply` without a valid token is rejected with `status=blocked, reason=approval token required (run telegram_approval.py first)`. Forged or expired tokens fail signature / claim verification and are also rejected without mutating any state.
 
 ## Release Checks
 
@@ -467,6 +594,7 @@ This version is considered a milestone because it has a real closed loop:
 - `v0.4.1 "Somnia Split"`: standalone Somnia skill package and module cleanup
 - `v0.4.2 "Telegram Gate"`: mandatory Telegram approval for install mutations
 - `v0.4.3 "Safety Tightening"`: safe skill slug containment for evolution updates and clearer registry safety posture
+- `v0.5.0 "Signed Gate"`: HMAC-signed approval tokens bound to skill identity and source content hash; missing or non-skill sources are refused before token issuance and before install mutation; dry-run approvals can no longer install or claim Telegram audit; replay regression gate compares candidate against installed baseline; manifest writes are atomic and `flock`-locked; redactor covers IPv4/IPv6, phone numbers, JWTs, common cloud/Git tokens, Telegram bot tokens, and PEM private keys
 
 ## License
 
