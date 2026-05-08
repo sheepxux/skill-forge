@@ -1,0 +1,30 @@
+name: Release Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-checks:
+    name: Release checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run release checks
+        run: python3 tests/run_release_checks.py
+
+      - name: Run secret scan
+        run: python3 skill-forge/scripts/security/scan_secrets.py --json

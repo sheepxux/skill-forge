@@ -7,6 +7,8 @@ python3 tests/run_release_checks.py
 python3 skill-forge/scripts/security/scan_secrets.py --json
 ```
 
+GitHub Actions runs the same release checks on `main` pushes and pull requests. Treat a failing workflow as a release blocker.
+
 Manual checks:
 
 - Confirm `skill-forge/VERSION` matches the intended release.
