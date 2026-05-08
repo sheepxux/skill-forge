@@ -98,6 +98,50 @@ def check_forge_plan() -> None:
         assert_true(result["validation"]["valid"], "forge candidate did not validate")
 
 
+def check_console_doctor() -> None:
+    env = os.environ.copy()
+    env["SKILL_FORGE_APPROVAL_SECRET"] = "release-check-secret"
+    env["TELEGRAM_BOT_TOKEN"] = "release-check-token"
+    env["TELEGRAM_CHAT_ID"] = "123456"
+    with tempfile.TemporaryDirectory() as target:
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "skill_forge.py"),
+                "doctor",
+                "--target-root",
+                target,
+                "--no-default-env-files",
+                "--json",
+            ],
+            env=env,
+        )
+        assert_true(result["version"] == "1.0.0", "console doctor reported the wrong version")
+        names = {item["name"]: item for item in result["checks"]}
+        assert_true(names["skill-package"]["status"] == "ok", "console doctor did not find the skill package")
+        assert_true(names["approval-secret"]["status"] == "ok", "console doctor did not find approval secret")
+
+
+def check_console_demo() -> None:
+    with tempfile.TemporaryDirectory() as output, tempfile.TemporaryDirectory() as target:
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "skill_forge.py"),
+                "demo",
+                "--output",
+                output,
+                "--target-root",
+                target,
+                "--json",
+            ]
+        )
+        assert_true(result["status"] == "ok", "console demo command failed")
+        payload = result.get("result") or {}
+        assert_true(payload.get("install_status") == "planned", "console demo did not stay plan-only")
+        assert_true(payload.get("validation", {}).get("valid"), "console demo candidate did not validate")
+
+
 def check_install_gate() -> None:
     with tempfile.TemporaryDirectory() as target:
         result = run_json(
@@ -613,6 +657,8 @@ def main() -> int:
         ("secret-scan", check_secret_scan),
         ("skill-validation", check_skill_validation),
         ("forge-plan", check_forge_plan),
+        ("console-doctor", check_console_doctor),
+        ("console-demo", check_console_demo),
         ("install-gate", check_install_gate),
         ("install-forged-token", check_install_rejects_forged_token),
         ("install-with-valid-token", check_install_with_valid_token_succeeds),

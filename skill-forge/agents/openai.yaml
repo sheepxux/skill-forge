@@ -1,4 +1,4 @@
 interface:
   display_name: "Skill Forge"
-  short_description: "Detect, scaffold, validate, and signed-gate skill installs"
-  default_prompt: "Turn a repeated capability gap into a reviewed skill candidate. Detect from .learnings, scaffold by profile, validate and score, run hidden smoke evaluation, and require a Telegram-issued signed approval token (HMAC-bound to skill name, target, method, source path, and source content hash) before any install or update mutation."
+  short_description: "Forge Console for skill creation, validation, replay, and signed-gate installs"
+  default_prompt: "Use the Forge Console to turn repeated capability gaps into reviewed skill candidates. Start with doctor/demo when onboarding, then forge, validate, replay, and require a Telegram-issued signed approval token (HMAC-bound to skill name, target, method, source path, and source content hash) before any install or update mutation."

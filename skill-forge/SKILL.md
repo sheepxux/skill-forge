@@ -7,7 +7,7 @@ description: Detect repeated capability gaps, convert recurring user needs into 
 
 Use this skill to turn repeated demand into a reviewed skill candidate.
 
-Current version: `v0.5.0 "Signed Gate"`.
+Current version: `v1.0.0 "Forge Console"`.
 
 ## Core jobs
 
@@ -20,6 +20,7 @@ Current version: `v0.5.0 "Signed Gate"`.
 7. Record feedback from later usage and propose reviewed updates instead of mutating installed skills directly.
 8. Provide the Somnia runtime used by scheduled nightly review to find skills with bugs, weak scores, or update-worthy feedback.
 9. Use redacted replay cases to check whether candidates actually cover real feedback-derived tasks.
+10. Provide a product console (`scripts/skill_forge.py`) so agents can run doctor checks, demos, forge flows, evolution, feedback capture, replay, and release gates from one entry point.
 
 ## Trigger Cues
 
@@ -46,6 +47,19 @@ Use this skill when the user or agent mentions:
 9. Run replay evaluation before approving evolved candidates when replay cases exist.
 
 ## Commands
+
+### Forge Console
+
+Prefer the product console for normal use:
+
+```bash
+python3 {baseDir}/scripts/skill_forge.py doctor --json
+python3 {baseDir}/scripts/skill_forge.py demo --json
+python3 {baseDir}/scripts/skill_forge.py forge --output ./generated --install plan --json
+python3 {baseDir}/scripts/skill_forge.py release-check --json
+```
+
+Use lower-level scripts only when a workflow needs exact control over one stage.
 
 ### Detect
 
@@ -288,6 +302,7 @@ References:
 - `references/heuristics.md`
 - `references/skill-quality-rubric.md`
 - `references/milestone-architecture.md`
+- `references/forge-console.md`
 
 Scripts:
 - `scripts/detect_skill_opportunities.py`
@@ -295,6 +310,8 @@ Scripts:
 - `scripts/generate_skill_scaffold.py`
 - `scripts/validate_skill_candidate.py`
 - `scripts/forge_pipeline.py`
+- `scripts/skill_forge.py`
+- `scripts/forge_console.py`
 - `scripts/install/propose_skill_install.py`
 - `scripts/install/telegram_approval.py`
 - `scripts/evolve/evolve_skill_pipeline.py`

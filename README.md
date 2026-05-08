@@ -13,9 +13,18 @@ This repository contains the `skill-forge` OpenClaw-compatible skill. It also su
 
 `skill-forge` is a milestone self-improvement product for OpenClaw-style agents.
 
-Current version: `v0.5.0 "Signed Gate"`.
+Current version: `v1.0.0 "Forge Console"`.
 
 It turns repeated capability gaps into reviewed skill candidates. The product deliberately separates learning, generation, validation, and installation so an agent can improve itself without silently polluting its own skill set.
+
+`v1.0.0` introduces the Forge Console, a single product entry point over the full lifecycle:
+
+```bash
+python3 skill-forge/scripts/skill_forge.py doctor --json
+python3 skill-forge/scripts/skill_forge.py demo --json
+python3 skill-forge/scripts/skill_forge.py forge --output ./generated --install plan --json
+python3 skill-forge/scripts/skill_forge.py release-check --json
+```
 
 ## Quick Start
 
@@ -36,6 +45,13 @@ clawhub install somnia
 The ClawHub package is published as `skills-forge` because `skill-forge` is already used by another publisher. ClawHub installs it into a `skills-forge/` folder; the skill metadata name remains `skill-forge`.
 
 ClawHub may show a safety warning because this skill includes Telegram approval calls and local install/rollback scripts. Review the source first; for non-interactive installs, pass `--force` only after review.
+
+After a ClawHub install, run the console from the installed package:
+
+```bash
+python3 ~/.openclaw/workspace/skills/skills-forge/scripts/skill_forge.py doctor --json
+python3 ~/.openclaw/workspace/skills/skills-forge/scripts/skill_forge.py demo --json
+```
 
 For local development, symlink this repository into OpenClaw:
 
@@ -63,26 +79,35 @@ Edit `~/.openclaw/skill-forge.env` and set your own Telegram bot token and chat 
 ### 3. Run release checks
 
 ```bash
-python3 tests/run_release_checks.py
+python3 skill-forge/scripts/skill_forge.py release-check
 ```
 
-### 4. Generate a candidate skill
+### 4. Check readiness
 
 ```bash
-python3 skill-forge/scripts/forge_pipeline.py \
-  --source skill-forge/examples/sample-feature-requests.md \
-  --source skill-forge/examples/sample-errors.md \
-  --output ./generated \
-  --eval hidden \
-  --install plan \
-  --agent-name StudyAgent \
+python3 skill-forge/scripts/skill_forge.py doctor \
+  --env-file ~/.openclaw/skill-forge.env \
   --json
 ```
 
-### 5. Install only after Telegram approval
+### 5. Run the safe demo
 
 ```bash
-python3 skill-forge/scripts/forge_pipeline.py \
+python3 skill-forge/scripts/skill_forge.py demo --json
+```
+
+Expected behavior:
+
+- detects the bundled `citation-helper` example
+- generates a candidate skill
+- validates it as `grade=milestone`
+- prints a plan-only install proposal
+- does not mutate installed skills
+
+### 6. Install only after Telegram approval
+
+```bash
+python3 skill-forge/scripts/skill_forge.py forge \
   --source skill-forge/examples/sample-feature-requests.md \
   --source skill-forge/examples/sample-errors.md \
   --output ./generated \
@@ -107,6 +132,7 @@ Reply to the Telegram approval message with `同意安装` or `yes`.
 - Records later usage feedback and proposes reviewed skill updates instead of self-mutating installed skills.
 - Runs scheduled nightly health reviews during sleep hours and can propose safe update candidates.
 - Builds redacted replay cases from feedback and blocks update candidates that regress on replay evaluation.
+- Provides a unified Forge Console (`scripts/skill_forge.py`) for doctor checks, demos, generation, signed install plans, feedback capture, replay checks, and release gates.
 
 ## Repository Layout
 
@@ -125,6 +151,7 @@ skill-forge/
     │   ├── detect_skill_opportunities.py
     │   ├── evaluate_skill_candidate.py
     │   ├── forge_pipeline.py
+    │   ├── skill_forge.py
     │   ├── generate_skill_scaffold.py
     │   ├── validate_skill_candidate.py
     │   ├── install/
@@ -195,12 +222,7 @@ Root-level wrappers remain under `skill-forge/scripts/*.py` for backward compati
 Run the plan-only pipeline (no installs, no Telegram, no secrets needed):
 
 ```bash
-python3 skill-forge/scripts/forge_pipeline.py \
-  --source skill-forge/examples/sample-feature-requests.md \
-  --source skill-forge/examples/sample-errors.md \
-  --output ./generated-milestone \
-  --eval hidden \
-  --json
+python3 skill-forge/scripts/skill_forge.py demo --json
 ```
 
 Expected behavior:
@@ -220,7 +242,7 @@ export TELEGRAM_CHAT_ID="..."
 # When unset, the secret is derived deterministically from TELEGRAM_BOT_TOKEN.
 export SKILL_FORGE_APPROVAL_SECRET="..."
 
-python3 skill-forge/scripts/forge_pipeline.py \
+python3 skill-forge/scripts/skill_forge.py forge \
   --source skill-forge/examples/sample-feature-requests.md \
   --source skill-forge/examples/sample-errors.md \
   --output ./generated-milestone \
@@ -239,9 +261,7 @@ What `--install telegram` does internally:
 Dry-run preview without sending a Telegram message:
 
 ```bash
-python3 skill-forge/scripts/forge_pipeline.py \
-  --source skill-forge/examples/sample-feature-requests.md \
-  --source skill-forge/examples/sample-errors.md \
+python3 skill-forge/scripts/skill_forge.py forge \
   --output ./generated-milestone \
   --install telegram \
   --telegram-dry-run approve \
@@ -252,6 +272,23 @@ python3 skill-forge/scripts/forge_pipeline.py \
 This issues a `mode=dry-run` token and exits with `install_status=dry-run-blocked`. The candidate target is **not** created. This is the expected safe behavior — dry-run tokens cannot mutate state.
 
 ## Manual Workflow
+
+The Forge Console is the product-level interface. The lower-level scripts remain public and stable for automation.
+
+### Console Commands
+
+```bash
+python3 skill-forge/scripts/skill_forge.py version
+python3 skill-forge/scripts/skill_forge.py doctor --json
+python3 skill-forge/scripts/skill_forge.py demo --json
+python3 skill-forge/scripts/skill_forge.py forge --output ./generated --install plan --json
+python3 skill-forge/scripts/skill_forge.py evolve --skill citation-helper --output ./generated-updates --json
+python3 skill-forge/scripts/skill_forge.py install ./generated/citation-helper --json
+python3 skill-forge/scripts/skill_forge.py uninstall citation-helper --json
+python3 skill-forge/scripts/skill_forge.py feedback --skill citation-helper --rating negative --feedback "Needs stronger APA handling." --json
+python3 skill-forge/scripts/skill_forge.py replay --skill citation-helper --skill-dir ./generated-updates/citation-helper --json
+python3 skill-forge/scripts/skill_forge.py release-check --json
+```
 
 ### 1. Detect opportunities
 
@@ -597,6 +634,7 @@ This version is considered a milestone because it has a real closed loop:
 - `v0.4.2 "Telegram Gate"`: mandatory Telegram approval for install mutations
 - `v0.4.3 "Safety Tightening"`: safe skill slug containment for evolution updates and clearer registry safety posture
 - `v0.5.0 "Signed Gate"`: HMAC-signed approval tokens bound to skill identity and source content hash; missing or non-skill sources are refused before token issuance and before install mutation; dry-run approvals can no longer install or claim Telegram audit; replay regression gate compares candidate against installed baseline; manifest writes are atomic and `flock`-locked; redactor covers IPv4/IPv6, phone numbers, JWTs, common cloud/Git tokens, Telegram bot tokens, and PEM private keys
+- `v1.0.0 "Forge Console"`: product-level command surface with doctor, demo, forge, evolve, install, uninstall, feedback, replay, release-check, and version commands; release checks cover the console smoke path
 
 ## License
 
