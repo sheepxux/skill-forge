@@ -17,10 +17,10 @@ Manual checks:
 Release tag:
 
 ```bash
-git tag v0.4.3
+git tag v0.5.0
 ```
 
 Published package slugs:
 
 - ClawHub: `skills-forge`
-- Optional companion: `somnia`
+- Optional companion: `somnia` (released separately)
