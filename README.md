@@ -13,17 +13,27 @@ This repository contains the `skill-forge` OpenClaw-compatible skill. It also su
 
 `skill-forge` is a milestone self-improvement product for OpenClaw-style agents.
 
-Current version: `v1.0.1 "Forge Console Patch"`.
+Current version: `v1.1.0 "Skill Quality Engine"`.
 
 It turns repeated capability gaps into reviewed skill candidates. The product deliberately separates learning, generation, validation, and installation so an agent can improve itself without silently polluting its own skill set.
 
-`v1.0.0` introduces the Forge Console, a single product entry point over the full lifecycle:
+`v1.1.0` adds the Skill Quality Engine: generated skills now include trigger-rich descriptions, progressive resource loading rules, execution-mode guidance, and validation against context-bloating project docs.
+
+The Forge Console remains the single product entry point over the full lifecycle:
 
 ```bash
 python3 skill-forge/scripts/skill_forge.py doctor --json
 python3 skill-forge/scripts/skill_forge.py demo --json
 python3 skill-forge/scripts/skill_forge.py forge --output ./generated --install plan --json
 python3 skill-forge/scripts/skill_forge.py release-check --json
+```
+
+If you are working from the source repository, the same product gates are available through `make`:
+
+```bash
+make doctor
+make demo
+make package-check
 ```
 
 ## Quick Start
@@ -79,8 +89,10 @@ Edit `~/.openclaw/skill-forge.env` and set your own Telegram bot token and chat 
 ### 3. Run release checks
 
 ```bash
-python3 skill-forge/scripts/skill_forge.py release-check
+make package-check
 ```
+
+If `make` is unavailable, run `python3 skill-forge/scripts/skill_forge.py release-check` and `python3 skill-forge/scripts/security/scan_secrets.py --json`.
 
 ### 4. Check readiness
 
@@ -623,6 +635,8 @@ This version is considered a milestone because it has a real closed loop:
 - Python 3.9 compatible scripts
 - no external Python dependencies
 - GitHub-ready repository structure
+- source-repo `Makefile` commands for doctor, demo, release checks, and secret scan
+- golden scaffold checks across academic, product, integration, script, and workflow profiles
 
 ## Version Milestones
 
@@ -636,6 +650,7 @@ This version is considered a milestone because it has a real closed loop:
 - `v0.5.0 "Signed Gate"`: HMAC-signed approval tokens bound to skill identity and source content hash; missing or non-skill sources are refused before token issuance and before install mutation; dry-run approvals can no longer install or claim Telegram audit; replay regression gate compares candidate against installed baseline; manifest writes are atomic and `flock`-locked; redactor covers IPv4/IPv6, phone numbers, JWTs, common cloud/Git tokens, Telegram bot tokens, and PEM private keys
 - `v1.0.0 "Forge Console"`: product-level command surface with doctor, demo, forge, evolve, install, uninstall, feedback, replay, release-check, and version commands; release checks cover the console smoke path
 - `v1.0.1 "Forge Console Patch"`: normalize console JSON pass-through for demo, remove duplicate console shim, expose install/uninstall bot-token env forwarding, clarify doctor secret source, and avoid duplicate source-repo secret scans
+- `v1.1.0 "Skill Quality Engine"`: generated skills use lean `SKILL.md` bodies, explicit progressive resource loading, execution-mode guidance, stronger frontmatter trigger descriptions, and validation that rejects README/CHANGELOG-style docs that bloat agent context
 
 ## License
 

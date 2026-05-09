@@ -88,15 +88,26 @@ def default_prompt(display_name: str, template: str) -> str:
     )
 
 
+def build_description(skill_name: str, goal: str, triggers: list[str], template: str) -> str:
+    context = "operating workflow" if template == "workflow" else f"{template.replace('-', ' ')} skill"
+    trigger_text = ", ".join(triggers[:8])
+    description = (
+        f"{goal} Use when the user asks for {trigger_text or titleize(skill_name)}, "
+        f"or when an agent needs a reusable {context} with bundled references, "
+        "quality gates, and clear output contracts."
+    )
+    return description[:1020].rstrip()
+
+
 def build_skill_md(skill_name: str, goal: str, triggers: list[str], template: str) -> str:
     pack = PROFILE_PACKS[template]
     display_name = titleize(skill_name)
-    trigger_text = ", ".join(triggers[:8])
-    description = f"{goal} Use when the user asks for {trigger_text or display_name}."
+    description = build_description(skill_name, goal, triggers, template)
     trigger_bullets = "\n".join(f"- `{item}`" for item in triggers) or "- `repeatable workflow`"
     workflow_steps = "\n".join(f"{index}. {step}" for index, step in enumerate(pack["workflow"], 1))
     contract_bullets = "\n".join(f"- {item}" for item in pack["output_contract"])
     profile_quality = "\n".join(f"- {item}" for item in pack.get("quality_gates", []))
+    resource_policy = "\n".join(f"- {item}" for item in pack.get("resource_policy", []))
     reference_bullets = "\n".join(f"- `references/{name}`" for name in pack["references"])
     script_bullets = ""
     if pack.get("scripts"):
@@ -109,19 +120,25 @@ description: {description}
 
 # {display_name}
 
-## Overview
-
-{goal}
-
 ## Trigger Cues
 
 Use this skill when the user mentions:
 
 {trigger_bullets}
 
-## Default Workflow
+## Core Workflow
 
 {workflow_steps}
+
+## Resource Loading
+
+Keep `SKILL.md` lean. Load bundled resources only when the task needs that detail.
+
+{resource_policy}
+
+## Execution Mode
+
+{pack.get("freedom_level", "medium freedom: adapt to context while preserving the workflow and quality gates.")}
 
 ## Output Contract
 

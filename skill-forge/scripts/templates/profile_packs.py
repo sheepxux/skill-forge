@@ -9,6 +9,12 @@ PROFILE_HINTS = {
 
 PROFILE_PACKS = {
     "academic": {
+        "freedom_level": "medium freedom: keep reasoning flexible, but require explicit citation safety checks before producing bibliography-like output.",
+        "resource_policy": [
+            "Read `references/citation-style-checklist.md` when the user asks for a named citation style.",
+            "Read `references/academic-output-template.md` when the user needs a reusable essay, paper, or assignment structure.",
+            "Read `references/source-metadata-intake.md` before treating source leads as complete references.",
+        ],
         "default_triggers": [
             "APA format",
             "MLA format",
@@ -130,6 +136,11 @@ If the user asks for a finished bibliography and metadata is incomplete, produce
         },
     },
     "product": {
+        "freedom_level": "high-to-medium freedom: adapt product judgment to context, but keep MVP, non-goals, and acceptance criteria structured.",
+        "resource_policy": [
+            "Read `references/prd-shape.md` when producing a PRD, feature spec, or implementation handoff.",
+            "Read `references/prioritization.md` when scope decisions, MVP cuts, or roadmap tradeoffs are central.",
+        ],
         "default_triggers": [
             "PRD",
             "MVP scope",
@@ -192,6 +203,10 @@ If the user asks for a finished bibliography and metadata is incomplete, produce
         },
     },
     "integration": {
+        "freedom_level": "medium freedom: adapt setup details to the target API, but keep credentials, health checks, and failure behavior explicit.",
+        "resource_policy": [
+            "Read `references/integration-checklist.md` before proposing setup steps or claiming an integration is ready.",
+        ],
         "default_triggers": [
             "API key",
             "OAuth",
@@ -239,6 +254,11 @@ If the user asks for a finished bibliography and metadata is incomplete, produce
         },
     },
     "script": {
+        "freedom_level": "low freedom for execution: prefer deterministic scripts, validated inputs, dry-run paths, and explicit exit codes.",
+        "resource_policy": [
+            "Read `references/script-contract.md` before editing or running bundled scripts.",
+            "Run `scripts/run.py` only after confirming inputs and whether mutation is allowed.",
+        ],
         "default_triggers": [
             "CLI",
             "batch process",
@@ -307,6 +327,10 @@ if __name__ == "__main__":
         },
     },
     "workflow": {
+        "freedom_level": "high freedom for judgment, medium freedom for output shape: adapt the workflow, but keep triggers, steps, and quality checks stable.",
+        "resource_policy": [
+            "Read `references/workflow-template.md` when turning the workflow into a reusable checklist or handoff artifact.",
+        ],
         "default_triggers": [
             "recurring workflow",
             "standard operating procedure",

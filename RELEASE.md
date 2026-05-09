@@ -3,6 +3,12 @@
 Run before publishing:
 
 ```bash
+make package-check
+```
+
+If `make` is unavailable, run:
+
+```bash
 python3 tests/run_release_checks.py
 python3 skill-forge/scripts/security/scan_secrets.py --json
 ```
@@ -15,11 +21,12 @@ Manual checks:
 - Confirm `.env.example` contains placeholders only.
 - Confirm no generated candidate directories are present.
 - Confirm real API keys and Telegram tokens have been rotated if they were ever exposed elsewhere.
+- Confirm golden scaffold checks cover `academic`, `product`, `integration`, `script`, and `workflow`.
 
 Release tag:
 
 ```bash
-git tag v1.0.1
+git tag v1.1.0
 ```
 
 Published package slugs:

@@ -7,7 +7,7 @@ description: Detect repeated capability gaps, convert recurring user needs into 
 
 Use this skill to turn repeated demand into a reviewed skill candidate.
 
-Current version: `v1.0.1 "Forge Console Patch"`.
+Current version: `v1.1.0 "Skill Quality Engine"`.
 
 ## Core jobs
 
@@ -45,6 +45,20 @@ Use this skill when the user or agent mentions:
 7. Record future usage feedback and run an evolution pipeline when enough feedback accumulates.
 8. During scheduled reviews, write summary reports and optionally propose updates without exposing hidden evaluation details.
 9. Run replay evaluation before approving evolved candidates when replay cases exist.
+10. Before release, run package checks and golden scaffold checks across all supported profiles.
+
+## Resource Loading
+
+Keep this `SKILL.md` focused on the operating path. Load bundled references only when the current task needs them:
+
+- Read `references/heuristics.md` when deciding whether a repeated need deserves a skill.
+- Read `references/skill-quality-rubric.md` when reviewing candidate quality or explaining a validation score.
+- Read `references/milestone-architecture.md` when changing install gates, replay gates, or evolution flow.
+- Read `references/forge-console.md` when using or modifying the product console.
+
+## Execution Mode
+
+Use medium freedom for planning and candidate design, but low freedom for install, uninstall, release checks, signed approval, replay regression, and file mutation paths.
 
 ## Commands
 
@@ -58,6 +72,8 @@ python3 {baseDir}/scripts/skill_forge.py demo --json
 python3 {baseDir}/scripts/skill_forge.py forge --output ./generated --install plan --json
 python3 {baseDir}/scripts/skill_forge.py release-check --json
 ```
+
+From the source repository, `make package-check` runs the same release gate plus secret scanning.
 
 Use lower-level scripts only when a workflow needs exact control over one stage.
 

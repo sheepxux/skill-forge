@@ -10,6 +10,14 @@ GENERIC_TRIGGER_WORDS = {
     "notes", "reusable", "structure", "process", "repeatable",
 }
 
+EXTRANEOUS_DOCS = {
+    "README.md",
+    "INSTALLATION_GUIDE.md",
+    "QUICK_REFERENCE.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+}
+
 PROFILE_KEYWORDS = {
     "academic": {
         "citation", "bibliography", "reference", "apa", "mla", "harvard",
@@ -114,6 +122,7 @@ def quality_report(skill_dir: Path) -> dict:
     openai_yaml = skill_dir / "agents" / "openai.yaml"
     references = sorted((skill_dir / "references").glob("*")) if (skill_dir / "references").exists() else []
     scripts = sorted((skill_dir / "scripts").rglob("*.py")) if (skill_dir / "scripts").exists() else []
+    extraneous_docs = sorted(path.name for path in skill_dir.iterdir() if path.name in EXTRANEOUS_DOCS) if skill_dir.exists() else []
 
     if not skill_md.exists():
         return {
@@ -133,6 +142,27 @@ def quality_report(skill_dir: Path) -> dict:
     )
     combined_text = f"{content}\n{reference_text}"
     inferred_profile = infer_profile(content, references)
+    line_count = len(content.splitlines())
+
+    if extraneous_docs:
+        errors.append(
+            "skill package contains user-facing project docs that bloat agent context: "
+            + ", ".join(extraneous_docs)
+        )
+
+    unexpected_frontmatter = sorted(set(frontmatter) - {"name", "description"})
+    if unexpected_frontmatter:
+        warnings.append(
+            "frontmatter should only contain name and description for reliable triggering: "
+            + ", ".join(unexpected_frontmatter)
+        )
+        milestone_caps.append(89)
+
+    if line_count <= 500:
+        score += 5
+    else:
+        warnings.append("SKILL.md should stay under 500 lines; move details into references")
+        milestone_caps.append(84)
 
     if frontmatter.get("name") and re.match(r"^[a-z0-9-]+$", frontmatter["name"]):
         score += 10
@@ -148,12 +178,29 @@ def quality_report(skill_dir: Path) -> dict:
         warnings.append("description is too generic for reliable triggering")
         milestone_caps.append(84)
 
-    required_sections = ["Trigger Cues", "Default Workflow", "Output Contract", "Quality Gates", "Resources"]
+    required_sections = ["Trigger Cues", "Output Contract", "Quality Gates", "Resources"]
     present_sections = [section for section in required_sections if f"## {section}" in content]
     score += len(present_sections) * 6
     missing_sections = sorted(set(required_sections) - set(present_sections))
     if missing_sections:
         warnings.append(f"missing recommended sections: {', '.join(missing_sections)}")
+
+    if "## Core Workflow" in content or "## Default Workflow" in content:
+        score += 6
+    else:
+        warnings.append("missing recommended section: Core Workflow or Default Workflow")
+
+    if "## Resource Loading" in content:
+        score += 6
+    else:
+        warnings.append("missing Resource Loading guidance for progressive disclosure")
+        milestone_caps.append(89)
+
+    if "## Execution Mode" in content:
+        score += 6
+    else:
+        warnings.append("missing Execution Mode guidance for the skill's degree of freedom")
+        milestone_caps.append(89)
 
     if count_numbered_steps(content) >= 4:
         score += 10

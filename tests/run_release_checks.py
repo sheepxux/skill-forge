@@ -116,7 +116,7 @@ def check_console_doctor() -> None:
             ],
             env=env,
         )
-        assert_true(result["version"] == "1.0.1", "console doctor reported the wrong version")
+        assert_true(result["version"] == "1.1.0", "console doctor reported the wrong version")
         names = {item["name"]: item for item in result["checks"]}
         assert_true(names["skill-package"]["status"] == "ok", "console doctor did not find the skill package")
         assert_true(names["approval-secret"]["status"] == "ok", "console doctor did not find approval secret")
@@ -342,6 +342,118 @@ def _scaffold_candidate(parent: Path, skill_name: str = "release-check-skill") -
         ]
     )
     return parent / skill_name
+
+
+def check_scaffold_quality_design() -> None:
+    with tempfile.TemporaryDirectory() as gen:
+        candidate = _scaffold_candidate(Path(gen), "quality-engine-skill")
+        content = (candidate / "SKILL.md").read_text(encoding="utf-8")
+        assert_true("## Core Workflow" in content, "generated skill should use a lean core workflow section")
+        assert_true("## Resource Loading" in content, "generated skill should explain progressive resource loading")
+        assert_true("## Execution Mode" in content, "generated skill should declare degree-of-freedom guidance")
+        assert_true("references/workflow-template.md" in content, "generated skill should link bundled references")
+        assert_true(not (candidate / "README.md").exists(), "generated skill should not include extraneous README docs")
+
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "validate_skill_candidate.py"),
+                str(candidate),
+                "--json",
+            ]
+        )
+        assert_true(result["valid"], "quality-engine scaffold should validate")
+        assert_true(result["score"] >= 85, "quality-engine scaffold should reach milestone quality")
+
+        (candidate / "README.md").write_text("# Not for agent context\n", encoding="utf-8")
+        invalid = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "validate_skill_candidate.py"),
+                str(candidate),
+                "--json",
+            ],
+            check=False,
+        )
+        assert_true(not invalid["valid"], "validator should reject extraneous user-facing docs")
+        assert_true(any("bloat agent context" in error for error in invalid["errors"]),
+                    "extraneous-doc error should explain context bloat")
+
+
+def check_profile_golden_scaffolds() -> None:
+    cases = [
+        (
+            "academic",
+            "citation-coach",
+            "Help Study Agent produce citation-safe academic plans without inventing references.",
+            "APA format, MLA format, source metadata, reference list",
+            ["references/citation-style-checklist.md", "Never invent"],
+        ),
+        (
+            "product",
+            "product-spec-writer",
+            "Help Product Agent turn ideas into MVP specs and Dev Agent handoffs.",
+            "PRD, MVP scope, acceptance criteria, Dev handoff",
+            ["references/prd-shape.md", "Non-goals"],
+        ),
+        (
+            "integration",
+            "telegram-notion-connector",
+            "Help agents plan safe Telegram and Notion integrations with health checks.",
+            "Telegram bot, Notion database, API key, health check",
+            ["references/integration-checklist.md", "Never print real secrets"],
+        ),
+        (
+            "script",
+            "batch-report-cli",
+            "Help agents package repeated reporting work into deterministic CLI scripts.",
+            "CLI, batch process, generate report, validate input",
+            ["references/script-contract.md", "scripts/run.py"],
+        ),
+        (
+            "workflow",
+            "handoff-checklist",
+            "Help agents standardize repeated handoff checklists and quality gates.",
+            "handoff checklist, repeatable process, quality gate",
+            ["references/workflow-template.md", "Execution Mode"],
+        ),
+    ]
+    with tempfile.TemporaryDirectory() as gen:
+        root = Path(gen)
+        for template, skill_name, goal, triggers, expected_fragments in cases:
+            run(
+                [
+                    sys.executable,
+                    str(SKILL_FORGE / "scripts" / "generate_skill_scaffold.py"),
+                    "--skill-name",
+                    skill_name,
+                    "--output",
+                    str(root),
+                    "--goal",
+                    goal,
+                    "--triggers",
+                    triggers,
+                    "--template",
+                    template,
+                ]
+            )
+            candidate = root / skill_name
+            content = (candidate / "SKILL.md").read_text(encoding="utf-8")
+            assert_true(len(content.splitlines()) <= 500, f"{template} scaffold SKILL.md is too long")
+            assert_true("## Resource Loading" in content, f"{template} scaffold missing Resource Loading")
+            assert_true("## Execution Mode" in content, f"{template} scaffold missing Execution Mode")
+            for fragment in expected_fragments:
+                assert_true(fragment in content, f"{template} scaffold missing expected fragment: {fragment}")
+            result = run_json(
+                [
+                    sys.executable,
+                    str(SKILL_FORGE / "scripts" / "validate_skill_candidate.py"),
+                    str(candidate),
+                    "--json",
+                ]
+            )
+            assert_true(result["valid"], f"{template} golden scaffold did not validate")
+            assert_true(result["score"] >= 85, f"{template} golden scaffold below milestone threshold")
 
 
 def _issue_token(env: dict, skill: str, source: Path, target: str, ttl: int = 600) -> str:
@@ -657,6 +769,8 @@ def main() -> int:
         ("secret-scan", check_secret_scan),
         ("skill-validation", check_skill_validation),
         ("forge-plan", check_forge_plan),
+        ("scaffold-quality-design", check_scaffold_quality_design),
+        ("profile-golden-scaffolds", check_profile_golden_scaffolds),
         ("console-doctor", check_console_doctor),
         ("console-demo", check_console_demo),
         ("install-gate", check_install_gate),
