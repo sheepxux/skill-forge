@@ -15,11 +15,11 @@ This repository contains the `skill-forge` OpenClaw-compatible skill. It also su
 
 `skill-forge` is a milestone self-improvement product for OpenClaw-style agents.
 
-Current version: `v1.1.0 "Skill Quality Engine"`.
+Current version: `v1.2.0 "Quality Refinement"`.
 
 It turns repeated capability gaps into reviewed skill candidates. The product deliberately separates learning, generation, validation, and installation so an agent can improve itself without silently polluting its own skill set.
 
-`v1.1.0` adds the Skill Quality Engine: generated skills now include trigger-rich descriptions, progressive resource loading rules, execution-mode guidance, and validation against context-bloating project docs.
+`v1.2.0` refines the Skill Quality Engine: descriptions stay anchored to user-specified triggers (profile defaults only top up the bullet list when the user under-specifies), the workflow section is now a milestone-grade requirement, the numbered-step bonus only counts steps inside the workflow section, the extraneous-docs gate is case-insensitive, and `version` / `license` / `author` are recognized as legitimate frontmatter keys.
 
 The Forge Console remains the single product entry point over the full lifecycle:
 
@@ -653,6 +653,7 @@ This version is considered a milestone because it has a real closed loop:
 - `v1.0.0 "Forge Console"`: product-level command surface with doctor, demo, forge, evolve, install, uninstall, feedback, replay, release-check, and version commands; release checks cover the console smoke path
 - `v1.0.1 "Forge Console Patch"`: normalize console JSON pass-through for demo, remove duplicate console shim, expose install/uninstall bot-token env forwarding, clarify doctor secret source, and avoid duplicate source-repo secret scans
 - `v1.1.0 "Skill Quality Engine"`: generated skills use lean `SKILL.md` bodies, explicit progressive resource loading, execution-mode guidance, stronger frontmatter trigger descriptions, and validation that rejects README/CHANGELOG-style docs that bloat agent context
+- `v1.2.0 "Quality Refinement"`: scaffold descriptions stay anchored to user-supplied triggers (profile defaults only top up when the user under-specifies); workflow section is now a milestone-grade requirement (cap 89 if missing); the numbered-step bonus only counts steps inside the workflow section so Quality-Gates lists no longer compensate; extraneous-doc detection is case-insensitive across README/INSTALL/SETUP/QUICKSTART variants; `version`, `license`, and `author` are recognized as legitimate frontmatter keys without capping the score
 
 ## License
 

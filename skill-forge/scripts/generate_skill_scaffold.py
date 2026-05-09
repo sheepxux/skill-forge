@@ -52,19 +52,36 @@ def clean_triggers(skill_name: str, triggers: list[str]) -> list[str]:
 
 
 def enrich_triggers(skill_name: str, triggers: list[str], template: str) -> list[str]:
+    """Return up to 8 trigger phrases for the SKILL.md bullet list.
+
+    User-supplied triggers always take precedence. Profile-default triggers are
+    only mixed in when the user under-specified (fewer than 5 triggers); they
+    top up to ~8 so the bullet list is rich enough for the validator's
+    5-trigger gate without flooding well-specified user inputs.
+    """
+    pack = PROFILE_PACKS[template]
     merged = []
     seen = set()
-    pack = PROFILE_PACKS[template]
-    for trigger in [*triggers, *pack.get("default_triggers", [])]:
+    for trigger in triggers:
         value = trigger.strip()
         slug = slugify(value)
-        if not slug or slug == skill_name or slug in GENERIC_TRIGGERS:
-            continue
-        if slug in seen:
+        if not slug or slug == skill_name or slug in GENERIC_TRIGGERS or slug in seen:
             continue
         merged.append(value)
         seen.add(slug)
-    return merged[:12] or [skill_name.replace("-", " ")]
+    if len(merged) >= 5:
+        return merged[:12]
+    target = 8
+    for trigger in pack.get("default_triggers", []):
+        if len(merged) >= target:
+            break
+        value = trigger.strip()
+        slug = slugify(value)
+        if not slug or slug == skill_name or slug in GENERIC_TRIGGERS or slug in seen:
+            continue
+        merged.append(value)
+        seen.add(slug)
+    return merged or [skill_name.replace("-", " ")]
 
 
 def yaml_quote(value: str) -> str:
@@ -88,9 +105,10 @@ def default_prompt(display_name: str, template: str) -> str:
     )
 
 
-def build_description(skill_name: str, goal: str, triggers: list[str], template: str) -> str:
+def build_description(skill_name: str, goal: str, user_triggers: list[str], all_triggers: list[str], template: str) -> str:
     context = "operating workflow" if template == "workflow" else f"{template.replace('-', ' ')} skill"
-    trigger_text = ", ".join(triggers[:8])
+    surface_triggers = user_triggers if user_triggers else all_triggers
+    trigger_text = ", ".join(surface_triggers[:8])
     description = (
         f"{goal} Use when the user asks for {trigger_text or titleize(skill_name)}, "
         f"or when an agent needs a reusable {context} with bundled references, "
@@ -99,11 +117,11 @@ def build_description(skill_name: str, goal: str, triggers: list[str], template:
     return description[:1020].rstrip()
 
 
-def build_skill_md(skill_name: str, goal: str, triggers: list[str], template: str) -> str:
+def build_skill_md(skill_name: str, goal: str, user_triggers: list[str], all_triggers: list[str], template: str) -> str:
     pack = PROFILE_PACKS[template]
     display_name = titleize(skill_name)
-    description = build_description(skill_name, goal, triggers, template)
-    trigger_bullets = "\n".join(f"- `{item}`" for item in triggers) or "- `repeatable workflow`"
+    description = build_description(skill_name, goal, user_triggers, all_triggers, template)
+    trigger_bullets = "\n".join(f"- `{item}`" for item in all_triggers) or "- `repeatable workflow`"
     workflow_steps = "\n".join(f"{index}. {step}" for index, step in enumerate(pack["workflow"], 1))
     contract_bullets = "\n".join(f"- {item}" for item in pack["output_contract"])
     profile_quality = "\n".join(f"- {item}" for item in pack.get("quality_gates", []))
@@ -162,13 +180,13 @@ References:
 """
 
 
-def write_candidate(skill_dir: Path, skill_name: str, goal: str, triggers: list[str], template: str) -> None:
+def write_candidate(skill_dir: Path, skill_name: str, goal: str, user_triggers: list[str], all_triggers: list[str], template: str) -> None:
     pack = PROFILE_PACKS[template]
     display_name = titleize(skill_name)
     (skill_dir / "agents").mkdir(parents=True, exist_ok=True)
     (skill_dir / "references").mkdir(parents=True, exist_ok=True)
 
-    skill_md = build_skill_md(skill_name, goal, triggers, template)
+    skill_md = build_skill_md(skill_name, goal, user_triggers, all_triggers, template)
     (skill_dir / "SKILL.md").write_text(skill_md, encoding="utf-8")
 
     openai_yaml = "\n".join(
@@ -209,15 +227,15 @@ def main() -> int:
 
     skill_name = slugify(args.skill_name)
     raw_triggers = [item.strip() for item in args.triggers.split(",") if item.strip()]
-    triggers = clean_triggers(skill_name, raw_triggers)
+    user_triggers = clean_triggers(skill_name, raw_triggers)
     template = args.template
     if template == "auto":
-        template = infer_template(skill_name, args.goal, triggers)
-    triggers = enrich_triggers(skill_name, triggers, template)
+        template = infer_template(skill_name, args.goal, user_triggers)
+    all_triggers = enrich_triggers(skill_name, user_triggers, template)
 
     output_root = Path(args.output).expanduser().resolve()
     skill_dir = output_root / skill_name
-    write_candidate(skill_dir, skill_name, args.goal.strip(), triggers, template)
+    write_candidate(skill_dir, skill_name, args.goal.strip(), user_triggers, all_triggers, template)
     print(f"{skill_dir} template={template}")
     return 0
 

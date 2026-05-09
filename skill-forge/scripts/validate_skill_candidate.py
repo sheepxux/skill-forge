@@ -10,12 +10,24 @@ GENERIC_TRIGGER_WORDS = {
     "notes", "reusable", "structure", "process", "repeatable",
 }
 
+ALLOWED_FRONTMATTER = {"name", "description", "version", "license", "author"}
+
+
 EXTRANEOUS_DOCS = {
-    "README.md",
-    "INSTALLATION_GUIDE.md",
-    "QUICK_REFERENCE.md",
-    "CHANGELOG.md",
-    "CONTRIBUTING.md",
+    "readme.md",
+    "readme.rst",
+    "readme.txt",
+    "install.md",
+    "installation.md",
+    "installation_guide.md",
+    "setup.md",
+    "usage.md",
+    "quick_reference.md",
+    "quickstart.md",
+    "changelog.md",
+    "changes.md",
+    "history.md",
+    "contributing.md",
 }
 
 PROFILE_KEYWORDS = {
@@ -122,7 +134,7 @@ def quality_report(skill_dir: Path) -> dict:
     openai_yaml = skill_dir / "agents" / "openai.yaml"
     references = sorted((skill_dir / "references").glob("*")) if (skill_dir / "references").exists() else []
     scripts = sorted((skill_dir / "scripts").rglob("*.py")) if (skill_dir / "scripts").exists() else []
-    extraneous_docs = sorted(path.name for path in skill_dir.iterdir() if path.name in EXTRANEOUS_DOCS) if skill_dir.exists() else []
+    extraneous_docs = sorted(path.name for path in skill_dir.iterdir() if path.is_file() and path.name.lower() in EXTRANEOUS_DOCS) if skill_dir.exists() else []
 
     if not skill_md.exists():
         return {
@@ -150,10 +162,10 @@ def quality_report(skill_dir: Path) -> dict:
             + ", ".join(extraneous_docs)
         )
 
-    unexpected_frontmatter = sorted(set(frontmatter) - {"name", "description"})
+    unexpected_frontmatter = sorted(set(frontmatter) - ALLOWED_FRONTMATTER)
     if unexpected_frontmatter:
         warnings.append(
-            "frontmatter should only contain name and description for reliable triggering: "
+            "frontmatter should only contain name, description, version, license, or author for reliable triggering: "
             + ", ".join(unexpected_frontmatter)
         )
         milestone_caps.append(89)
@@ -185,10 +197,12 @@ def quality_report(skill_dir: Path) -> dict:
     if missing_sections:
         warnings.append(f"missing recommended sections: {', '.join(missing_sections)}")
 
-    if "## Core Workflow" in content or "## Default Workflow" in content:
+    workflow_section_text = section_text(content, "Core Workflow") or section_text(content, "Default Workflow")
+    if workflow_section_text:
         score += 6
     else:
         warnings.append("missing recommended section: Core Workflow or Default Workflow")
+        milestone_caps.append(89)
 
     if "## Resource Loading" in content:
         score += 6
@@ -202,10 +216,10 @@ def quality_report(skill_dir: Path) -> dict:
         warnings.append("missing Execution Mode guidance for the skill's degree of freedom")
         milestone_caps.append(89)
 
-    if count_numbered_steps(content) >= 4:
+    if count_numbered_steps(workflow_section_text) >= 4:
         score += 10
     else:
-        warnings.append("default workflow should include at least 4 numbered steps")
+        warnings.append("workflow section should include at least 4 numbered steps")
 
     if len(triggers) >= 5 and len(specific_triggers) >= 4:
         score += 10

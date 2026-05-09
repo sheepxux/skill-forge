@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -116,7 +117,11 @@ def check_console_doctor() -> None:
             ],
             env=env,
         )
-        assert_true(result["version"] == "1.1.0", "console doctor reported the wrong version")
+        expected_version = (SKILL_FORGE / "VERSION").read_text(encoding="utf-8").strip()
+        assert_true(
+            result["version"] == expected_version,
+            f"console doctor reported version {result['version']!r}, expected {expected_version!r}",
+        )
         names = {item["name"]: item for item in result["checks"]}
         assert_true(names["skill-package"]["status"] == "ok", "console doctor did not find the skill package")
         assert_true(names["approval-secret"]["status"] == "ok", "console doctor did not find approval secret")
@@ -342,6 +347,165 @@ def _scaffold_candidate(parent: Path, skill_name: str = "release-check-skill") -
         ]
     )
     return parent / skill_name
+
+
+def check_frontmatter_metadata_allowlist() -> None:
+    with tempfile.TemporaryDirectory() as gen:
+        candidate = _scaffold_candidate(Path(gen), "frontmatter-allowlist-skill")
+        skill_md = candidate / "SKILL.md"
+        text = skill_md.read_text(encoding="utf-8")
+        text = text.replace(
+            "---\nname:",
+            "---\nversion: 1.0.0\nlicense: MIT\nauthor: Test Author\nname:",
+            1,
+        )
+        skill_md.write_text(text, encoding="utf-8")
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "validate_skill_candidate.py"),
+                str(candidate),
+                "--json",
+            ]
+        )
+        assert_true(result["valid"], "skill with allowed metadata frontmatter should validate")
+        assert_true(result["score"] == 100, f"version/license/author should not cap score, got {result['score']}")
+        assert_true(
+            not any("frontmatter should only contain" in w for w in result.get("warnings", [])),
+            "allowed frontmatter keys should not warn",
+        )
+
+        # Unknown key should still cap.
+        text = skill_md.read_text(encoding="utf-8")
+        text = text.replace("---\nversion:", "---\nmysterious_key: oops\nversion:", 1)
+        skill_md.write_text(text, encoding="utf-8")
+        capped = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "validate_skill_candidate.py"),
+                str(candidate),
+                "--json",
+            ]
+        )
+        assert_true(capped["score"] <= 89, "unknown frontmatter keys should still cap below milestone")
+
+
+def check_workflow_section_required() -> None:
+    with tempfile.TemporaryDirectory() as gen:
+        candidate = _scaffold_candidate(Path(gen), "workflow-required-skill")
+        skill_md = candidate / "SKILL.md"
+        text = skill_md.read_text(encoding="utf-8")
+        # Strip the entire Core Workflow section.
+        stripped = re.sub(
+            r"(?ms)^## Core Workflow\s*\n.*?(?=^## )",
+            "",
+            text,
+            count=1,
+        )
+        assert_true(stripped != text, "fixture must remove the Core Workflow section")
+        skill_md.write_text(stripped, encoding="utf-8")
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "validate_skill_candidate.py"),
+                str(candidate),
+                "--json",
+            ]
+        )
+        assert_true(result["score"] <= 89, f"missing workflow section should cap at 89, got {result['score']}")
+        assert_true(
+            any("Core Workflow or Default Workflow" in w for w in result.get("warnings", [])),
+            "missing-workflow warning should fire",
+        )
+
+
+def check_numbered_steps_must_live_in_workflow() -> None:
+    with tempfile.TemporaryDirectory() as gen:
+        candidate = _scaffold_candidate(Path(gen), "numbered-steps-scope-skill")
+        skill_md = candidate / "SKILL.md"
+        text = skill_md.read_text(encoding="utf-8")
+        # Replace the numbered Core Workflow with a bullet list, then add 4 numbered
+        # items inside Quality Gates so the *document* still has 4+ numbered steps.
+        text = re.sub(
+            r"(?ms)(^## Core Workflow\s*\n)(.*?)(?=^## )",
+            lambda m: m.group(1) + "- step one as a bullet\n- step two as a bullet\n- step three as a bullet\n\n",
+            text,
+            count=1,
+        )
+        text = text.replace(
+            "## Quality Gates\n",
+            "## Quality Gates\n\n1. first numbered gate\n2. second numbered gate\n3. third numbered gate\n4. fourth numbered gate\n",
+            1,
+        )
+        skill_md.write_text(text, encoding="utf-8")
+        result = run_json(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "validate_skill_candidate.py"),
+                str(candidate),
+                "--json",
+            ]
+        )
+        assert_true(
+            any("workflow section should include at least 4 numbered steps" in w for w in result.get("warnings", [])),
+            "numbered-step bonus must require numbered steps inside the workflow section",
+        )
+
+
+def check_scaffold_description_anchored_to_user_triggers() -> None:
+    with tempfile.TemporaryDirectory() as gen:
+        run(
+            [
+                sys.executable,
+                str(SKILL_FORGE / "scripts" / "generate_skill_scaffold.py"),
+                "--skill-name",
+                "anchored-scaffold-skill",
+                "--output",
+                gen,
+                "--goal",
+                "Help an agent run a niche, well-specified probe.",
+                "--triggers",
+                "probe payload, parse signed envelope, dump signing keyset, replay last token",
+                "--template",
+                "script",
+            ]
+        )
+        text = (Path(gen) / "anchored-scaffold-skill" / "SKILL.md").read_text(encoding="utf-8")
+        # Description (frontmatter) must NOT contain profile-default trigger flooding.
+        match = re.search(r"^description: (.*)$", text, re.MULTILINE)
+        assert_true(match is not None, "scaffold should expose a frontmatter description")
+        description = match.group(1)
+        assert_true("probe payload" in description, "user-supplied triggers must reach the description")
+        for default_only in ("automation script", "convert files", "export data"):
+            assert_true(
+                default_only not in description,
+                f"profile-default trigger {default_only!r} should not flood a well-specified description",
+            )
+
+
+def check_extraneous_docs_case_insensitive() -> None:
+    with tempfile.TemporaryDirectory() as gen:
+        candidate = _scaffold_candidate(Path(gen), "case-probe-skill")
+        for filename in ("readme.md", "Readme.MD", "INSTALL.md", "Setup.md", "QUICKSTART.md"):
+            (candidate / filename).write_text("# test\n", encoding="utf-8")
+            invalid = run_json(
+                [
+                    sys.executable,
+                    str(SKILL_FORGE / "scripts" / "validate_skill_candidate.py"),
+                    str(candidate),
+                    "--json",
+                ],
+                check=False,
+            )
+            assert_true(
+                not invalid["valid"],
+                f"validator should reject extraneous doc filename {filename!r}",
+            )
+            assert_true(
+                any("bloat agent context" in error for error in invalid["errors"]),
+                f"extraneous-doc error missing for {filename!r}",
+            )
+            (candidate / filename).unlink()
 
 
 def check_scaffold_quality_design() -> None:
@@ -771,6 +935,11 @@ def main() -> int:
         ("forge-plan", check_forge_plan),
         ("scaffold-quality-design", check_scaffold_quality_design),
         ("profile-golden-scaffolds", check_profile_golden_scaffolds),
+        ("extraneous-docs-case-insensitive", check_extraneous_docs_case_insensitive),
+        ("frontmatter-metadata-allowlist", check_frontmatter_metadata_allowlist),
+        ("workflow-section-required", check_workflow_section_required),
+        ("numbered-steps-scoped-to-workflow", check_numbered_steps_must_live_in_workflow),
+        ("scaffold-description-anchored", check_scaffold_description_anchored_to_user_triggers),
         ("console-doctor", check_console_doctor),
         ("console-demo", check_console_demo),
         ("install-gate", check_install_gate),

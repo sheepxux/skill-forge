@@ -7,7 +7,7 @@ description: Detect repeated capability gaps, convert recurring user needs into 
 
 Use this skill to turn repeated demand into a reviewed skill candidate.
 
-Current version: `v1.1.0 "Skill Quality Engine"`.
+Current version: `v1.2.0 "Quality Refinement"`.
 
 ## Core jobs
 
