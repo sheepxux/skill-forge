@@ -2,7 +2,7 @@
   <img src="assets/skill-forge-logo.png" alt="Skill Forge logo" width="360">
 </p>
 
-# Skill Forge
+# Skill Forge 技能锻造器
 
 [![Release Checks](https://github.com/sheepxux/skill-forge/actions/workflows/release-checks.yml/badge.svg)](https://github.com/sheepxux/skill-forge/actions/workflows/release-checks.yml)
 [![ClawHub package](https://img.shields.io/badge/ClawHub-skills--forge-2ea44f)](https://clawhub.ai/sheepxux/skills-forge)
@@ -10,7 +10,7 @@
 
 **[English](README.md) ｜ 简体中文**
 
-**面向自我演化型 LLM Agent 的签名审批 skill 流水线。** 从日志里检测能力缺口、按 profile 生成脚手架、跑验证器评分，再用 HMAC 绑定的审批令牌守住每一次 install 与 update 的状态变更。
+**Skill Forge（技能锻造器）是面向自我演化型 LLM Agent 的签名审批 skill 流水线。** 从日志里检测能力缺口、按 profile 生成脚手架、跑验证器评分，再用 HMAC 绑定的审批令牌守住每一次 install 与 update 的状态变更。
 
 当前版本：**`v1.4.0 "Evolve First"`**。
 

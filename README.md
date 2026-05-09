@@ -2,7 +2,7 @@
   <img src="assets/skill-forge-logo.png" alt="Skill Forge logo" width="360">
 </p>
 
-# Skill Forge
+# Skill Forge 技能锻造器
 
 [![Release Checks](https://github.com/sheepxux/skill-forge/actions/workflows/release-checks.yml/badge.svg)](https://github.com/sheepxux/skill-forge/actions/workflows/release-checks.yml)
 [![ClawHub package](https://img.shields.io/badge/ClawHub-skills--forge-2ea44f)](https://clawhub.ai/sheepxux/skills-forge)
@@ -10,7 +10,7 @@
 
 **English ｜ [简体中文](README.zh-CN.md)**
 
-**Signed-approval skill pipeline for self-improving LLM agents.** Detect capability gaps from logs, scaffold by profile, validate, and require an HMAC-bound approval token before any install or update mutates state.
+**Skill Forge（技能锻造器）is a signed-approval skill pipeline for self-improving LLM agents.** Detect capability gaps from logs, scaffold by profile, validate, and require an HMAC-bound approval token before any install or update mutates state.
 
 Current version: **`v1.4.0 "Evolve First"`**.
 
