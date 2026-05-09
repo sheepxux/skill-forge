@@ -1,0 +1,47 @@
+name: Feature request
+description: Propose a product or workflow improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For large design changes, prefer GitHub Discussions first. Feature issues should describe a concrete workflow gap.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What repeated workflow or capability gap should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should Skill Forge do differently?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - detect
+        - generate
+        - validate
+        - decide/evolve routing
+        - install gate
+        - replay/benchmark
+        - documentation
+        - other
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety constraints
+      options:
+        - label: This does not bypass signed approval for install/update mutations.
+          required: true
+        - label: This preserves deterministic local-first behavior unless explicitly discussed.
+          required: true

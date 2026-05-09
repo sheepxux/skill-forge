@@ -5,6 +5,7 @@
 # Skill Forge 技能锻造器
 
 [![Release Checks](https://github.com/sheepxux/skill-forge/actions/workflows/release-checks.yml/badge.svg)](https://github.com/sheepxux/skill-forge/actions/workflows/release-checks.yml)
+[![Benchmarks](https://github.com/sheepxux/skill-forge/actions/workflows/benchmarks.yml/badge.svg)](https://github.com/sheepxux/skill-forge/actions/workflows/benchmarks.yml)
 [![ClawHub package](https://img.shields.io/badge/ClawHub-skills--forge-2ea44f)](https://clawhub.ai/sheepxux/skills-forge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 

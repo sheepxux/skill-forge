@@ -1,0 +1,55 @@
+name: Bug report
+description: Report a reproducible Skill Forge defect.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include exact commands and JSON output so the issue can be reproduced.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What broke, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Paste the exact commands you ran.
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: JSON output / logs
+      description: Paste the exact JSON output or terminal logs. Do not summarize.
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Skill Forge version
+      placeholder: "python3 skill-forge/scripts/skill_forge.py version"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "macOS 15, Python 3.11, OpenClaw version if known"
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I ran `python3 skill-forge/scripts/skill_forge.py doctor --json`.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

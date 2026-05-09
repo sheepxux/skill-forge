@@ -7,7 +7,8 @@
 Send a private report by either:
 
 - **GitHub Security Advisories** (preferred): https://github.com/sheepxux/skill-forge/security/advisories/new — this lets us collaborate on a fix in private and publish a CVE if warranted.
-- **Email**: `security@sheepxu.dev` (replace with your actual address before publishing). Encrypt with the maintainer's GPG key listed at the bottom of this file when handling sensitive payloads.
+
+Email reporting is not currently advertised. Use GitHub Security Advisories so the report stays private and linked to the repository.
 
 Please include:
 

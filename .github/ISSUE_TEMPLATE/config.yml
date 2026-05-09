@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Q&A / usage help
+    url: https://github.com/sheepxux/skill-forge/discussions/categories/q-a
+    about: Ask usage questions in GitHub Discussions instead of opening an issue.
+  - name: Security vulnerability
+    url: https://github.com/sheepxux/skill-forge/security/advisories/new
+    about: Report signed-gate, token, redaction, or path traversal vulnerabilities privately.
