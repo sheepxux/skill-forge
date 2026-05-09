@@ -522,8 +522,10 @@ def build_parser() -> argparse.ArgumentParser:
                         default="workflow")
     decide.add_argument("--reason", default="", help="Inline opportunity: short reason / evidence snippet.")
     decide.add_argument("--target-root", default=str(DEFAULT_TARGET_ROOT))
-    decide.add_argument("--evolve-threshold", type=float, default=0.45)
-    decide.add_argument("--ambiguous-margin", type=float, default=0.1)
+    decide.add_argument("--evolve-threshold", type=float, default=0.45,
+                        help="Fitness threshold for routing to evolve. Default 0.45.")
+    decide.add_argument("--ambiguous-margin", type=float, default=0.1,
+                        help="Top-vs-second fitness margin within which routing is flagged ambiguous. Default 0.1.")
     decide.add_argument("--json", action="store_true")
     decide.set_defaults(func=command_decide)
 
