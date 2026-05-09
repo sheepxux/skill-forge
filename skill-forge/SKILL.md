@@ -7,7 +7,7 @@ description: Detect repeated capability gaps, convert recurring user needs into 
 
 Use this skill to turn repeated demand into a reviewed skill candidate.
 
-Current version: `v1.3.0 "Benchmark Pipeline"`.
+Current version: `v1.4.0 "Evolve First"`.
 
 ## Core jobs
 
@@ -38,15 +38,16 @@ Use this skill when the user or agent mentions:
 
 1. Detect repeated capability gaps from learning files or session-derived notes.
 2. Classify the strongest opportunity into a skill profile.
-3. Scaffold a candidate skill with profile-specific resources.
-4. Validate the candidate and inspect score, warnings, and references.
-5. Run hidden smoke evaluation without exposing simulated cases to users.
-6. Propose installation, then require Telegram approval before applying it.
-7. Record future usage feedback and run an evolution pipeline when enough feedback accumulates.
-8. During scheduled reviews, write summary reports and optionally propose updates without exposing hidden evaluation details.
-9. Run replay evaluation before approving evolved candidates when replay cases exist.
-10. Before release, run package checks and golden scaffold checks across all supported profiles.
-11. Run deterministic benchmarks before release to enforce validation, hidden-eval, line-count, and runtime budgets.
+3. When `--prefer-evolve` is set, route the opportunity through `decide_skill_action.py` first; if it matches an installed skill, evolve that skill instead of forging a new one.
+4. Scaffold a candidate skill with profile-specific resources (forge path).
+5. Validate the candidate and inspect score, warnings, and references.
+6. Run hidden smoke evaluation without exposing simulated cases to users.
+7. Propose installation, then require Telegram approval before applying it.
+8. Record future usage feedback and run an evolution pipeline when enough feedback accumulates.
+9. During scheduled reviews, write summary reports and optionally propose updates without exposing hidden evaluation details.
+10. Run replay evaluation before approving evolved candidates when replay cases exist.
+11. Before release, run package checks and golden scaffold checks across all supported profiles.
+12. Run deterministic benchmarks before release to enforce validation, hidden-eval, line-count, and runtime budgets.
 
 ## Resource Loading
 
@@ -87,6 +88,28 @@ python3 {baseDir}/scripts/detect_skill_opportunities.py --json
 ```
 
 Add `--source` paths when a specific workspace or learnings file should be analyzed.
+
+### Decide (evolve-or-forge routing)
+
+After detect, ask whether the opportunity should evolve an existing installed skill or forge a new one. Use this to prevent skill sprawl when a request is really just a new trigger surface for something the user already installed.
+
+```bash
+python3 {baseDir}/scripts/skill_forge.py decide \
+  --skill-name "literature-review-helper" \
+  --triggers "APA format, MLA format, literature review, source metadata" \
+  --template academic \
+  --reason "user keeps asking for APA literature reviews" \
+  --json
+```
+
+Output is one of `evolve` / `forge` / `ambiguous` plus per-candidate fitness scores. To run the full pipeline with auto-routing, pass `--prefer-evolve` to `forge`:
+
+```bash
+python3 {baseDir}/scripts/skill_forge.py forge \
+  --output ./generated --install plan --prefer-evolve --json
+```
+
+Profile mismatch is a hard gate (fitness 0). The replay non-regression gate downstream catches any mis-routed evolution that would degrade the installed baseline.
 
 ### Choose
 

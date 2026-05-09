@@ -38,6 +38,75 @@ def run_evaluation(skill_dir: str, profile: str, mode: str) -> Optional[dict]:
     return run_json(command, check=False)
 
 
+def run_decide(args: argparse.Namespace, opportunity: dict) -> dict:
+    triggers_csv = ", ".join(opportunity.get("triggers") or [])
+    template = opportunity.get("recommended_template", "workflow")
+    cmd = [
+        sys.executable,
+        str(BASE_DIR / "decide_skill_action.py"),
+        "--target-root", args.target_root,
+        "--evolve-threshold", str(args.evolve_threshold),
+        "--ambiguous-margin", str(args.ambiguous_margin),
+        "--skill-name", opportunity.get("suggested_skill_name", ""),
+        "--triggers", triggers_csv,
+        "--template", template,
+        "--reason", opportunity.get("reason", ""),
+        "--json",
+    ]
+    return run_json(cmd, check=False)
+
+
+def record_routing_feedback(target_skill: str, opportunity: dict, agent_name: str) -> dict:
+    """Persist the opportunity as a synthetic feedback entry so evolve_skill_pipeline
+    has something to build a candidate from. Tagged source=forge-routing for audit.
+
+    The opportunity literally IS feedback the system noticed; treating it as such
+    keeps a single feedback timeline rather than inventing a parallel signal channel.
+    """
+    triggers = opportunity.get("triggers") or []
+    reason = opportunity.get("reason", "").strip()
+    feedback_text = (
+        f"Forge-router gap: {reason or 'no reason'}. "
+        f"New trigger surface to consider: {', '.join(triggers) or '(none)'}."
+    )
+    cmd = [
+        sys.executable,
+        str(BASE_DIR / "record_skill_feedback.py"),
+        "--skill", target_skill,
+        "--rating", "neutral",
+        "--feedback", feedback_text,
+        "--source", "forge-routing",
+        "--tags", "forge-routing,auto-detected",
+        "--json",
+    ]
+    if agent_name:
+        cmd.extend(["--agent-name", agent_name])
+    return run_json(cmd, check=False)
+
+
+def run_evolve_via_routing(args: argparse.Namespace, target_skill: str) -> dict:
+    cmd = [
+        sys.executable,
+        str(BASE_DIR / "evolve_skill_pipeline.py"),
+        "--skill", target_skill,
+        "--output", args.output,
+        "--target-root", args.target_root,
+        "--install", args.install,
+        "--eval", args.eval,
+        "--telegram-dry-run", args.telegram_dry_run,
+        "--telegram-bot-token-env", args.telegram_bot_token_env,
+        "--telegram-chat-id-env", args.telegram_chat_id_env,
+        "--telegram-timeout", str(args.telegram_timeout),
+        "--min-install-score", str(args.min_install_score),
+        "--json",
+    ]
+    if args.agent_name:
+        cmd.extend(["--agent-name", args.agent_name])
+    if args.env_file:
+        cmd.extend(["--env-file", args.env_file])
+    return run_json(cmd, check=False)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run detect -> generate -> validate for one candidate skill.")
     parser.add_argument("--source", action="append", default=[], help="Source learnings/log file.")
@@ -104,6 +173,24 @@ def main() -> int:
         default="off",
         help="Developer test mode for Telegram approval without network calls.",
     )
+    parser.add_argument(
+        "--prefer-evolve",
+        action="store_true",
+        help="Route the detected opportunity through decide_skill_action.py first; "
+             "if it matches an installed skill, evolve that skill instead of forging a new one.",
+    )
+    parser.add_argument(
+        "--evolve-threshold",
+        type=float,
+        default=0.45,
+        help="Fitness threshold for routing to evolve. Default 0.45.",
+    )
+    parser.add_argument(
+        "--ambiguous-margin",
+        type=float,
+        default=0.1,
+        help="Top-vs-second fitness margin within which routing is flagged ambiguous.",
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
@@ -118,6 +205,25 @@ def main() -> int:
         return 0
 
     opportunity = opportunities[0]
+
+    routing = None
+    if args.prefer_evolve:
+        routing = run_decide(args, opportunity)
+        if routing.get("decision") == "evolve" and routing.get("target_skill"):
+            target_skill = routing["target_skill"]
+            feedback_record = record_routing_feedback(target_skill, opportunity, args.agent_name)
+            evolve_result = run_evolve_via_routing(args, target_skill)
+            payload = {
+                "status": evolve_result.get("status", "needs-review"),
+                "routed_to": "evolve",
+                "routing": routing,
+                "opportunity": opportunity,
+                "feedback_record": feedback_record,
+                "evolve_result": evolve_result,
+            }
+            print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else f"routed-to-evolve:{target_skill}")
+            return 0 if evolve_result.get("status") == "ok" else 1
+
     skill_name = opportunity["suggested_skill_name"]
     triggers = ", ".join(opportunity.get("triggers") or [skill_name])
     template = opportunity.get("recommended_template", "workflow")
@@ -175,6 +281,8 @@ def main() -> int:
 
     payload = {
         "status": "ok" if report["valid"] else "needs-review",
+        "routed_to": "forge",
+        "routing": routing,
         "opportunity": opportunity,
         "skill_dir": skill_dir,
         "validation": report,

@@ -483,6 +483,257 @@ def check_scaffold_description_anchored_to_user_triggers() -> None:
             )
 
 
+def _seed_installed_skill(target_root: Path, name: str, profile_label: str,
+                          triggers: list, body_extra: str = "") -> None:
+    """Drop a minimal SKILL.md into target_root/<name>/ and register it in the manifest."""
+    skill_dir = target_root / name
+    (skill_dir / "references").mkdir(parents=True, exist_ok=True)
+    triggers_block = "\n".join(f"- `{t}`" for t in triggers)
+    description_triggers = ", ".join(triggers[:6]) or name
+    skill_md = f"""---
+name: {name}
+description: Help an agent with {profile_label} tasks. Use when the user asks for {description_triggers}, or when an agent needs a reusable {profile_label} skill with bundled references, quality gates, and clear output contracts.
+---
+
+# {name.replace('-', ' ').title()}
+
+## Trigger Cues
+
+Use this skill when the user mentions:
+
+{triggers_block}
+
+## Core Workflow
+
+1. Step one.
+2. Step two.
+3. Step three.
+4. Step four.
+
+## Resource Loading
+
+- Read references/notes.md when applicable.
+
+## Execution Mode
+
+medium freedom
+
+## Output Contract
+
+- summary
+- structured artifact
+
+## Quality Gates
+
+- Be deterministic.
+- Be honest.
+
+{body_extra}
+
+## Resources
+
+References:
+- references/notes.md
+"""
+    (skill_dir / "SKILL.md").write_text(skill_md, encoding="utf-8")
+    (skill_dir / "references" / "notes.md").write_text("notes\n", encoding="utf-8")
+    manifest_path = target_root / ".skill-forge-installs.json"
+    manifest = {"installs": {}}
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            manifest = {"installs": {}}
+    manifest.setdefault("installs", {})[name] = {
+        "skill": name,
+        "source": str(skill_dir),
+        "target": str(skill_dir),
+        "method": "symlink",
+        "active": True,
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                             encoding="utf-8")
+
+
+def _decide(target_root: Path, name: str, triggers: str, template: str,
+            reason: str = "", evolve_threshold: float = 0.45,
+            ambiguous_margin: float = 0.1) -> dict:
+    return run_json([
+        sys.executable,
+        str(SKILL_FORGE / "scripts" / "decide_skill_action.py"),
+        "--target-root", str(target_root),
+        "--skill-name", name,
+        "--triggers", triggers,
+        "--template", template,
+        "--reason", reason,
+        "--evolve-threshold", str(evolve_threshold),
+        "--ambiguous-margin", str(ambiguous_margin),
+        "--json",
+    ])
+
+
+def check_decide_routes_to_evolve_when_similar() -> None:
+    with tempfile.TemporaryDirectory() as root_str:
+        root = Path(root_str)
+        triggers = ["citation review", "APA format", "MLA format", "source metadata",
+                    "reference list", "bibliography"]
+        _seed_installed_skill(root, "citation-helper", "academic citation", triggers,
+                              body_extra="Cover APA, MLA, Chicago, and bibliography metadata. Never invent references.")
+        result = _decide(
+            root,
+            name="literature-citation-helper",
+            triggers="APA format, MLA format, source metadata, reference list, bibliography",
+            template="academic",
+            reason="user keeps asking for APA literature reviews with source metadata",
+        )
+        assert_true(result["decision"] == "evolve",
+                    f"similar academic opportunity should evolve, got {result['decision']} ({result['fitness']})")
+        assert_true(result["target_skill"] == "citation-helper",
+                    f"target_skill should be citation-helper, got {result['target_skill']}")
+        assert_true(result["fitness"] >= 0.45,
+                    f"fitness should clear the threshold, got {result['fitness']}")
+
+
+def check_decide_routes_to_forge_when_novel() -> None:
+    with tempfile.TemporaryDirectory() as root_str:
+        root = Path(root_str)
+        _seed_installed_skill(root, "citation-helper", "academic citation",
+                              ["APA format", "MLA format", "source metadata"])
+        result = _decide(
+            root,
+            name="vector-db-prober",
+            triggers="probe vector store, dump schema, sample rows, detect index, infer embedding dim",
+            template="script",
+            reason="user wants to introspect unknown vector databases via CLI",
+        )
+        assert_true(result["decision"] == "forge",
+                    f"novel script opportunity should forge, got {result['decision']}")
+        assert_true(result["target_skill"] is None, "forge decision should have no target_skill")
+
+
+def check_decide_respects_profile_mismatch() -> None:
+    with tempfile.TemporaryDirectory() as root_str:
+        root = Path(root_str)
+        _seed_installed_skill(root, "citation-helper", "academic citation",
+                              ["APA format", "MLA format", "Chicago citation", "bibliography"])
+        # Topic + name overlap with the academic skill, BUT script profile.
+        result = _decide(
+            root,
+            name="citation-cli-tool",
+            triggers="CLI, batch process, parse files, validate input, exit code",
+            template="script",
+            reason="wrap citation work in a deterministic CLI",
+        )
+        assert_true(result["decision"] == "forge",
+                    f"profile-mismatched opportunity must NOT evolve an academic skill, got {result['decision']}")
+        for alt in result.get("alternatives", []):
+            if alt["skill"] == "citation-helper":
+                assert_true(alt["fitness"] == 0.0,
+                            f"profile-mismatched candidate must score 0, got {alt['fitness']}")
+                assert_true(not alt["reasoning"]["profile_match"],
+                            "profile_match should be false in reasoning")
+
+
+def check_decide_flags_ambiguous_when_tied() -> None:
+    with tempfile.TemporaryDirectory() as root_str:
+        root = Path(root_str)
+        # Two academic skills with IDENTICAL triggers — any matching opportunity ties.
+        identical_triggers = ["APA format", "MLA format", "source metadata",
+                              "reference list", "bibliography"]
+        _seed_installed_skill(root, "citation-helper", "academic citation", identical_triggers)
+        _seed_installed_skill(root, "research-helper", "academic citation", identical_triggers)
+        result = _decide(
+            root,
+            name="literature-citation-helper",  # name overlap with neither so no exact-name short-circuit
+            triggers="APA format, MLA format, source metadata, reference list, bibliography",
+            template="academic",
+            reason="academic write-up with citations",
+        )
+        assert_true(result["decision"] == "ambiguous",
+                    f"two equally-fit installed skills must produce ambiguous, got {result['decision']}")
+        alts = result.get("alternatives", [])
+        assert_true(len(alts) >= 2, "ambiguous decision should surface both top candidates")
+        assert_true(abs(alts[0]["fitness"] - alts[1]["fitness"]) < result["ambiguous_margin"],
+                    "top two fitnesses should be within ambiguous margin")
+
+
+def check_forge_pipeline_prefer_evolve_routes_through_decide() -> None:
+    """End-to-end: when --prefer-evolve sees an installed skill matching the
+    detected opportunity, the pipeline routes to evolve and writes a synthetic
+    forge-routing feedback record (instead of generating a brand-new skill)."""
+    with tempfile.TemporaryDirectory() as root_str, \
+         tempfile.TemporaryDirectory() as out_str, \
+         tempfile.TemporaryDirectory() as feedback_dir, \
+         tempfile.TemporaryDirectory() as updates_dir:
+        root = Path(root_str)
+        # Pre-seed an installed citation-helper that the detect script's top
+        # opportunity (also "citation-helper" from sample-feature-requests.md)
+        # will exact-name-match against.
+        _seed_installed_skill(root, "citation-helper", "academic citation",
+                              ["APA format", "MLA format", "source metadata",
+                               "reference list", "Chicago citation", "bibliography"])
+
+        env = os.environ.copy()
+        env["SKILL_FORGE_APPROVAL_SECRET"] = "release-check-secret"
+
+        feedback_file = Path(feedback_dir) / "skill-feedback.jsonl"
+        result = run_json([
+            sys.executable,
+            str(SKILL_FORGE / "scripts" / "forge_pipeline.py"),
+            "--source", str(SKILL_FORGE / "examples" / "sample-feature-requests.md"),
+            "--source", str(SKILL_FORGE / "examples" / "sample-errors.md"),
+            "--output", out_str,
+            "--target-root", str(root),
+            "--eval", "hidden",
+            "--install", "plan",
+            "--prefer-evolve",
+            "--agent-name", "StudyAgent",
+            "--json",
+        ], env=env)
+
+        assert_true(result.get("routed_to") == "evolve",
+                    f"prefer-evolve with matching installed skill should route to evolve, got {result.get('routed_to')}")
+        routing = result.get("routing", {})
+        assert_true(routing.get("decision") == "evolve",
+                    f"routing decision should be evolve, got {routing.get('decision')}")
+        assert_true(routing.get("target_skill") == "citation-helper",
+                    f"routing target should be citation-helper, got {routing.get('target_skill')}")
+        feedback_record = result.get("feedback_record", {})
+        assert_true(feedback_record.get("entry", {}).get("source") == "forge-routing",
+                    "synthetic feedback must be tagged source=forge-routing for audit")
+        evolve_result = result.get("evolve_result", {})
+        assert_true(evolve_result.get("status") == "ok",
+                    f"evolve sub-pipeline should succeed, got status={evolve_result.get('status')}")
+
+
+def check_forge_pipeline_default_does_not_route() -> None:
+    """Backward compat: without --prefer-evolve, forge_pipeline must behave
+    exactly as before (no routing call, no evolve dispatch)."""
+    with tempfile.TemporaryDirectory() as root_str, tempfile.TemporaryDirectory() as out_str:
+        root = Path(root_str)
+        _seed_installed_skill(root, "citation-helper", "academic citation",
+                              ["APA format", "MLA format", "source metadata",
+                               "reference list", "Chicago citation", "bibliography"])
+        result = run_json([
+            sys.executable,
+            str(SKILL_FORGE / "scripts" / "forge_pipeline.py"),
+            "--source", str(SKILL_FORGE / "examples" / "sample-feature-requests.md"),
+            "--source", str(SKILL_FORGE / "examples" / "sample-errors.md"),
+            "--output", out_str,
+            "--target-root", str(root),
+            "--eval", "hidden",
+            "--install", "plan",
+            "--agent-name", "StudyAgent",
+            "--json",
+        ])
+        assert_true(result.get("routed_to") == "forge",
+                    f"default behavior should be routed_to=forge, got {result.get('routed_to')}")
+        assert_true(result.get("routing") is None,
+                    "default behavior must not invoke decide (routing should be None)")
+        assert_true(Path(result["skill_dir"]).is_dir(),
+                    "default behavior should still produce a candidate skill directory")
+
+
 def check_extraneous_docs_case_insensitive() -> None:
     with tempfile.TemporaryDirectory() as gen:
         candidate = _scaffold_candidate(Path(gen), "case-probe-skill")
@@ -935,6 +1186,12 @@ def main() -> int:
         ("forge-plan", check_forge_plan),
         ("scaffold-quality-design", check_scaffold_quality_design),
         ("profile-golden-scaffolds", check_profile_golden_scaffolds),
+        ("decide-routes-to-evolve-when-similar", check_decide_routes_to_evolve_when_similar),
+        ("decide-routes-to-forge-when-novel", check_decide_routes_to_forge_when_novel),
+        ("decide-respects-profile-mismatch", check_decide_respects_profile_mismatch),
+        ("decide-flags-ambiguous-when-tied", check_decide_flags_ambiguous_when_tied),
+        ("forge-pipeline-prefer-evolve-routes", check_forge_pipeline_prefer_evolve_routes_through_decide),
+        ("forge-pipeline-default-does-not-route", check_forge_pipeline_default_does_not_route),
         ("extraneous-docs-case-insensitive", check_extraneous_docs_case_insensitive),
         ("frontmatter-metadata-allowlist", check_frontmatter_metadata_allowlist),
         ("workflow-section-required", check_workflow_section_required),

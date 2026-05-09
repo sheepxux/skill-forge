@@ -245,6 +245,37 @@ def command_forge(args: argparse.Namespace) -> int:
         command.extend(["--source", source])
     if args.env_file:
         command.extend(["--env-file", args.env_file])
+    if args.prefer_evolve:
+        command.append("--prefer-evolve")
+        command.extend(["--evolve-threshold", str(args.evolve_threshold)])
+        command.extend(["--ambiguous-margin", str(args.ambiguous_margin)])
+    if args.json:
+        command.append("--json")
+    return run_child(command, json_mode=False)
+
+
+def command_decide(args: argparse.Namespace) -> int:
+    command = [
+        sys.executable,
+        str(SCRIPT_DIR / "decide_skill_action.py"),
+        "--target-root",
+        args.target_root,
+        "--evolve-threshold",
+        str(args.evolve_threshold),
+        "--ambiguous-margin",
+        str(args.ambiguous_margin),
+    ]
+    if args.opportunity_json:
+        command.extend(["--opportunity-json", args.opportunity_json])
+    elif args.opportunity_stdin:
+        command.append("--opportunity-stdin")
+    else:
+        command.extend([
+            "--skill-name", args.skill_name,
+            "--triggers", args.triggers,
+            "--template", args.template,
+            "--reason", args.reason,
+        ])
     if args.json:
         command.append("--json")
     return run_child(command, json_mode=False)
@@ -466,8 +497,35 @@ def build_parser() -> argparse.ArgumentParser:
     forge.add_argument("--agent-name", default="")
     forge.add_argument("--telegram-dry-run", choices=["off", "approve", "reject", "timeout"], default="off")
     forge.add_argument("--env-file", default="")
+    forge.add_argument(
+        "--prefer-evolve",
+        action="store_true",
+        help="Route the detected opportunity through `decide` first; if it matches an installed skill, evolve that skill instead of forging a new one. Default off in 1.x for backward compatibility.",
+    )
+    forge.add_argument("--evolve-threshold", type=float, default=0.45,
+                       help="Fitness threshold for routing to evolve. Default 0.45.")
+    forge.add_argument("--ambiguous-margin", type=float, default=0.1,
+                       help="Top-vs-second fitness margin within which routing is flagged ambiguous. Default 0.1.")
     forge.add_argument("--json", action="store_true")
     forge.set_defaults(func=command_forge)
+
+    decide = subparsers.add_parser("decide",
+        help="Given an opportunity, decide whether to evolve an installed skill or forge a new one.")
+    decide.add_argument("--opportunity-json", default="",
+                        help="Path to an opportunity JSON file (e.g. one entry from detect_skill_opportunities.py output).")
+    decide.add_argument("--opportunity-stdin", action="store_true",
+                        help="Read the opportunity JSON object from stdin.")
+    decide.add_argument("--skill-name", default="", help="Inline opportunity: suggested skill name.")
+    decide.add_argument("--triggers", default="", help="Inline opportunity: comma-separated triggers.")
+    decide.add_argument("--template",
+                        choices=["academic", "product", "integration", "script", "workflow"],
+                        default="workflow")
+    decide.add_argument("--reason", default="", help="Inline opportunity: short reason / evidence snippet.")
+    decide.add_argument("--target-root", default=str(DEFAULT_TARGET_ROOT))
+    decide.add_argument("--evolve-threshold", type=float, default=0.45)
+    decide.add_argument("--ambiguous-margin", type=float, default=0.1)
+    decide.add_argument("--json", action="store_true")
+    decide.set_defaults(func=command_decide)
 
     evolve = subparsers.add_parser("evolve", help="Propose a reviewed update from feedback.")
     evolve.add_argument("--skill", required=True)
