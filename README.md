@@ -6,6 +6,8 @@
 
 [![Release Checks](https://github.com/sheepxux/skill-forge/actions/workflows/release-checks.yml/badge.svg)](https://github.com/sheepxux/skill-forge/actions/workflows/release-checks.yml)
 
+[ClawHub package: `skills-forge`](https://clawhub.ai/sheepxux/skills-forge)
+
 This repository contains the `skill-forge` OpenClaw-compatible skill. It also supports a sibling companion skill:
 
 - `skill-forge`: generates, validates, installs, and evolves reusable skills.
