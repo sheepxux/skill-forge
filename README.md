@@ -15,11 +15,11 @@ This repository contains the `skill-forge` OpenClaw-compatible skill. It also su
 
 `skill-forge` is a milestone self-improvement product for OpenClaw-style agents.
 
-Current version: `v1.2.0 "Quality Refinement"`.
+Current version: `v1.3.0 "Benchmark Pipeline"`.
 
 It turns repeated capability gaps into reviewed skill candidates. The product deliberately separates learning, generation, validation, and installation so an agent can improve itself without silently polluting its own skill set.
 
-`v1.2.0` refines the Skill Quality Engine: descriptions stay anchored to user-specified triggers (profile defaults only top up the bullet list when the user under-specifies), the workflow section is now a milestone-grade requirement, the numbered-step bonus only counts steps inside the workflow section, the extraneous-docs gate is case-insensitive, and `version` / `license` / `author` are recognized as legitimate frontmatter keys.
+`v1.3.0` adds a deterministic benchmark pipeline: fixed profile benchmark cases, runtime and score budgets, a source-repo `make benchmark` command, and a dedicated GitHub Actions Benchmarks workflow.
 
 The Forge Console remains the single product entry point over the full lifecycle:
 
@@ -35,6 +35,7 @@ If you are working from the source repository, the same product gates are availa
 ```bash
 make doctor
 make demo
+make benchmark
 make package-check
 ```
 
@@ -94,7 +95,7 @@ Edit `~/.openclaw/skill-forge.env` and set your own Telegram bot token and chat 
 make package-check
 ```
 
-If `make` is unavailable, run `python3 skill-forge/scripts/skill_forge.py release-check` and `python3 skill-forge/scripts/security/scan_secrets.py --json`.
+If `make` is unavailable, run `python3 skill-forge/scripts/skill_forge.py release-check`, `python3 tests/run_benchmarks.py --json`, and `python3 skill-forge/scripts/security/scan_secrets.py --json`.
 
 ### 4. Check readiness
 
@@ -639,6 +640,8 @@ This version is considered a milestone because it has a real closed loop:
 - GitHub-ready repository structure
 - source-repo `Makefile` commands for doctor, demo, release checks, and secret scan
 - golden scaffold checks across academic, product, integration, script, and workflow profiles
+- deterministic benchmark cases with validation score, hidden-eval score, line-count, and runtime budgets
+- GitHub Actions CI workflows for release checks and benchmarks
 
 ## Version Milestones
 
@@ -654,6 +657,7 @@ This version is considered a milestone because it has a real closed loop:
 - `v1.0.1 "Forge Console Patch"`: normalize console JSON pass-through for demo, remove duplicate console shim, expose install/uninstall bot-token env forwarding, clarify doctor secret source, and avoid duplicate source-repo secret scans
 - `v1.1.0 "Skill Quality Engine"`: generated skills use lean `SKILL.md` bodies, explicit progressive resource loading, execution-mode guidance, stronger frontmatter trigger descriptions, and validation that rejects README/CHANGELOG-style docs that bloat agent context
 - `v1.2.0 "Quality Refinement"`: scaffold descriptions stay anchored to user-supplied triggers (profile defaults only top up when the user under-specifies); workflow section is now a milestone-grade requirement (cap 89 if missing); the numbered-step bonus only counts steps inside the workflow section so Quality-Gates lists no longer compensate; extraneous-doc detection is case-insensitive across README/INSTALL/SETUP/QUICKSTART variants; `version`, `license`, and `author` are recognized as legitimate frontmatter keys without capping the score
+- `v1.3.0 "Benchmark Pipeline"`: adds deterministic benchmark cases for academic, product, integration, script, and workflow scaffolds; enforces validation/evaluation/runtime budgets; adds `make benchmark`; wires benchmark results into a dedicated GitHub Actions workflow with uploaded JSON artifacts
 
 ## License
 

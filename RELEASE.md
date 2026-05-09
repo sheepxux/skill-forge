@@ -10,10 +10,11 @@ If `make` is unavailable, run:
 
 ```bash
 python3 tests/run_release_checks.py
+python3 tests/run_benchmarks.py --json
 python3 skill-forge/scripts/security/scan_secrets.py --json
 ```
 
-GitHub Actions runs the same release checks on `main` pushes and pull requests. Treat a failing workflow as a release blocker.
+GitHub Actions runs release checks and deterministic benchmarks on `main` pushes and pull requests. Treat either workflow failing as a release blocker.
 
 Manual checks:
 
@@ -22,11 +23,12 @@ Manual checks:
 - Confirm no generated candidate directories are present.
 - Confirm real API keys and Telegram tokens have been rotated if they were ever exposed elsewhere.
 - Confirm golden scaffold checks cover `academic`, `product`, `integration`, `script`, and `workflow`.
+- Confirm benchmark results pass validation, hidden-eval, line-count, and runtime budgets.
 
 Release tag:
 
 ```bash
-git tag v1.2.0
+git tag v1.3.0
 ```
 
 Published package slugs:

@@ -7,7 +7,7 @@ description: Detect repeated capability gaps, convert recurring user needs into 
 
 Use this skill to turn repeated demand into a reviewed skill candidate.
 
-Current version: `v1.2.0 "Quality Refinement"`.
+Current version: `v1.3.0 "Benchmark Pipeline"`.
 
 ## Core jobs
 
@@ -46,6 +46,7 @@ Use this skill when the user or agent mentions:
 8. During scheduled reviews, write summary reports and optionally propose updates without exposing hidden evaluation details.
 9. Run replay evaluation before approving evolved candidates when replay cases exist.
 10. Before release, run package checks and golden scaffold checks across all supported profiles.
+11. Run deterministic benchmarks before release to enforce validation, hidden-eval, line-count, and runtime budgets.
 
 ## Resource Loading
 
